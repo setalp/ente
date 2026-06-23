@@ -15,6 +15,7 @@ CRATES=(
     bindings/uniffi/ensu/db
     bindings/uniffi/ensu/sync
     bindings/uniffi/ensu/inference
+    bindings/uniffi/ensu/retrieval
     bindings/uniffi/ensu/transcription
 )
 

@@ -94,6 +94,10 @@ fn generate_native_ios() -> Result<(), DynError> {
             crate_dir: rust_root.join("bindings/uniffi/ensu/inference"),
         },
         UniffiCrate {
+            crate_name: "retrieval",
+            crate_dir: rust_root.join("bindings/uniffi/ensu/retrieval"),
+        },
+        UniffiCrate {
             crate_name: "transcription",
             crate_dir: rust_root.join("bindings/uniffi/ensu/transcription"),
         },
@@ -158,6 +162,14 @@ fn generate_native_android() -> Result<(), DynError> {
             },
             out_dir: rust_out_dir.clone(),
             stale_path: rust_out_dir.join("io/ente/labs/inference_rs/inference.kt"),
+        },
+        AndroidCrate {
+            uniffi: UniffiCrate {
+                crate_name: "retrieval",
+                crate_dir: rust_root.join("bindings/uniffi/ensu/retrieval"),
+            },
+            out_dir: rust_out_dir.clone(),
+            stale_path: rust_out_dir.join("io/ente/labs/retrieval/retrieval.kt"),
         },
         AndroidCrate {
             uniffi: UniffiCrate {
