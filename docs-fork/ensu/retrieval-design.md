@@ -127,6 +127,39 @@ user's documents, and on-device is mandatory (private text can't go to a cloud e
   toggle in `components/chat/ChatComposer.tsx`; feature flag in `services/featureFlags.ts`.
 - Native (later): `rust/crates/ensu/retrieval` mirroring it on the Rust core.
 
+## Android wiring plan (native path)
+
+Codebase findings (verified by reading source):
+
+- **Embedding is feasible on the existing engine.** `inference_rs` (crate at
+  `rust/crates/ensu/inference/`) is built on `llama-cpp-2` v0.1.144, which **supports
+  embeddings** — `LlamaContext::embeddings_seq_ith(i)` + `with_embeddings(true)` /
+  `with_pooling_type(..)` on context params. Today the crate exposes only generation; we
+  add an `embed()` path. No new runtime needed. (Note: `:rust` Android module also bundles
+  `onnxruntime-android` — a fallback embedding option, but llama.cpp keeps one engine.)
+- **Kotlin↔Rust via uniffi.** Generated packages `io.ente.labs.inference_rs` and
+  `io.ente.labs.ensu_db`. Pattern: core crate → `bindings/uniffi/ensu/<x>` (`#[uniffi::export]`,
+  `setup_scaffolding!`) → Kotlin. Adding a crate = core + uniffi binding + workspace member.
+- **Prompt-assembly injection point:** `domain/.../store/ChatStoreActions.kt` —
+  `sendMessage()` → `startGeneration()` → `buildPrompt()` / `buildHistorySelection()` →
+  `llmProvider.generateChat()`. Retrieved context is injected in `buildPrompt()` before the
+  `LlmMessage` list is built, within the existing token budget.
+- **Toggle + storage:** `AdvancedSettingsDataStore` (`ensu_advanced_settings`) for a
+  `rag_enabled` flag; `FilePathManager` for an index dir; model/index download mirrors
+  `InferenceRsProvider.downloadLlmModelFiles`. Composer toggle in `app-ui/.../chat/ChatInputBar.kt`.
+
+Build order (each layer compiled before the next; build/test deferred while the full index
+bakes to avoid CPU contention):
+
+1. **Rust core embed()** — `inference_rs`: extend `ContextParams` with `embeddings`, add
+   `embed(context, texts) -> Vec<Vec<f32>>` (tokenize → decode → `embeddings_seq_ith(0)` →
+   L2-normalize). Host `cargo test` against EmbeddingGemma GGUF (dim 768, similar texts → high cosine).
+2. **Retrieval core crate** — `rust/crates/ensu/retrieval`: load the prebuilt index
+   (vectors.int8 + meta), cosine top-k, similarity-threshold gate (~0.45).
+3. **uniffi bindings** — expose `embed` + retrieval search to Kotlin.
+4. **Kotlin `RetrievalProvider`** (`:domain` interface, `:data` impl) + index download + DataStore toggle.
+5. **Inject** retrieved passages in `ChatStoreActions.buildPrompt()`; **toggle** in `ChatInputBar`.
+
 ## Source selection (v1)
 
 - Corpus: **Simple English Wikipedia** — [`wikimedia/wikipedia` → `20231101.simple`](https://huggingface.co/datasets/wikimedia/wikipedia)
@@ -183,11 +216,9 @@ Being resolved one at a time; this section updates as each is settled.
    passages only if the top match's cosine similarity clears a tuned threshold. Nearly free
    (reuses the query embedding + top result), prevents irrelevant passages from derailing
    non-factual turns (greetings/coding/reasoning). Threshold tuned empirically during the spike.
-5. **v1 platform scope** — ✅ **Web + native mobile** (full product surface: web, desktop,
-   iOS, Android). Added components vs web-only: a Rust `rust/crates/ensu/retrieval` crate
-   (embed via llama.cpp + cosine search + index load), uniffi bindings, and Swift/Kotlin UI
-   for the toggle + source display. **Recommended sequencing** (same destination, less
-   rework): (a) web first to validate retrieval quality and tune the threshold/index against
-   the prebuilt asset, then (b) Rust-core port for native parity reusing the identical index
-   file. Desktop (Tauri) rides on the web build throughout.
+5. **v1 platform scope** — ✅ **Android-first** (user override of the web-first
+   recommendation; mobile is the priority target, and it validates the hardest path —
+   Rust core + uniffi + Kotlin — first). Web/desktop/iOS follow later reusing the same Rust
+   retrieval crate + index. Trade-off accepted: slower first iteration than web, but no
+   throwaway web work.
 6. **Per-source on-device/online boundary** (relevant once structured sources land) — _open, deferred._
