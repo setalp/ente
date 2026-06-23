@@ -28,6 +28,9 @@ pub struct ContextParams {
     pub context_size: Option<i32>,
     pub n_threads: Option<i32>,
     pub n_batch: Option<i32>,
+    // Defaulted so existing call sites (chat contexts on every platform) keep
+    // compiling without passing it; only the embedding context sets it true.
+    #[uniffi(default = None)]
     pub embeddings: Option<bool>,
 }
 

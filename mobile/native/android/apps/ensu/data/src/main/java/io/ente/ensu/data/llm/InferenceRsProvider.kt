@@ -323,7 +323,8 @@ class InferenceRsProvider(
         val contextParams = ContextParams(
             contextSize = currentContextLength,
             nThreads = null,
-            nBatch = null
+            nBatch = null,
+            embeddings = null
         )
         contextHandle?.destroy()
         contextHandle = createContext(model, contextParams)
@@ -413,7 +414,8 @@ class InferenceRsProvider(
                 val contextParams = ContextParams(
                     contextSize = ctx,
                     nThreads = threads,
-                    nBatch = batch
+                    nBatch = batch,
+                    embeddings = null
                 )
                 contextHandle = createContext(model, contextParams)
                 currentModelKey = LoadedModelKey(target.id, target.contextLength)
