@@ -168,12 +168,20 @@ on macOS/Metal). `embed()` runtime smoke test (`inference/tests/embed.rs`, gated
 cosine(query, relevant)=0.487 vs (query, unrelated)=−0.035. Confirms `llama-cpp-2` v0.1.144
 supports the EmbeddingGemma architecture — no engine bump needed.
 
+**Android build verified.** Toolchain: JDK 17 (Homebrew keg-only; registered via
+`~/.gradle/gradle.properties` `org.gradle.java.installations.paths`), Android SDK at
+`/opt/homebrew/share/android-commandlinetools`, NDK 27.3.13750724, `local.properties`
+`sdk.dir`. `retrieval` wired into `build-rust.sh` CRATES + `codegen/main.rs`; bindings are a
+build prerequisite — run `cargo codegen native` (not committed/gradle-generated).
+`./gradlew :domain:compileKotlin :data:compileDebugKotlin` **BUILD SUCCESSFUL** — generated
+`retrieval.kt`/`inference.kt`, `RustRetrievalProvider`, `ChatStoreActions` injection, and
+`AppStore` DI all compile.
+
 **Remaining to activate (default-off today):**
 - `AppViewModel`: construct `RustRetrievalProvider(embeddingModelPath, indexDir)` and pass to `AppStore`.
 - Provision assets: EmbeddingGemma GGUF + index dir via `FilePathManager` + download.
 - Per-conversation toggle: `AdvancedSettingsDataStore` flag + state field + `ChatInputBar` control.
-- Android NDK build: add the `retrieval` crate to `build-rust.sh` / uniffi-bindgen list.
-- **Verify**: `cargo build`/`test` the Rust layers, then a device build, once the spike frees the machine.
+- Full app assemble (`:app-ui:assembleDebug` → triggers `buildRustJni` NDK cross-compile) + on-device test.
 
 ## Source selection (v1)
 
