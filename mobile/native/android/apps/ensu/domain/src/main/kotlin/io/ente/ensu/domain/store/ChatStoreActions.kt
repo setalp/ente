@@ -7,6 +7,7 @@ import io.ente.ensu.domain.llm.LlmMessage
 import io.ente.ensu.domain.llm.LlmMessageRole
 import io.ente.ensu.domain.llm.LlmModelTarget
 import io.ente.ensu.domain.llm.LlmProvider
+import io.ente.ensu.domain.llm.RetrievalProvider
 import io.ente.ensu.domain.model.Attachment
 import io.ente.ensu.domain.model.ChatMessage
 import io.ente.ensu.domain.model.ChatSession
@@ -45,7 +46,10 @@ internal class ChatStoreActions(
     private val attachmentActions: AttachmentStoreActions,
     private val syncActions: SyncStoreActions,
     private val modelSettingsActions: ModelSettingsActions,
-    private val ensuDefaults: EnsuDefaults
+    private val ensuDefaults: EnsuDefaults,
+    // Null until wired in AppViewModel; when present and ready, retrieved
+    // Wikipedia context is injected before the user turn (see retrieveWikipediaContext).
+    private val retrievalProvider: RetrievalProvider? = null
 ) {
     private val branchSelections = mutableMapOf<String, MutableMap<String, String>>()
     private val sessionSummaries = mutableMapOf<String, String>()
@@ -581,11 +585,23 @@ internal class ChatStoreActions(
                 text = systemPrompt,
                 role = LlmMessageRole.System
             )
-            val llmMessages = listOf(systemMessage) + history + LlmMessage(
-                text = prompt.text,
-                role = LlmMessageRole.User,
-                hasAttachments = userMessage.attachments.isNotEmpty()
-            )
+            // On-device Wikipedia retrieval (best-effort): inject as a system
+            // message after the main system prompt, before history + user turn.
+            val retrievedContext = retrieveWikipediaContext(userMessage.text)
+            val llmMessages = buildList {
+                add(systemMessage)
+                if (retrievedContext != null) {
+                    add(LlmMessage(text = retrievedContext, role = LlmMessageRole.System))
+                }
+                addAll(history)
+                add(
+                    LlmMessage(
+                        text = prompt.text,
+                        role = LlmMessageRole.User,
+                        hasAttachments = userMessage.attachments.isNotEmpty()
+                    )
+                )
+            }
 
             val buffer = StringBuilder()
             var tokenCount = 0
@@ -1107,6 +1123,41 @@ internal class ChatStoreActions(
         }
 
         return PromptResult(builder.toString(), imageFiles)
+    }
+
+    /**
+     * Retrieve Wikipedia passages for [query] and format them for prompt
+     * injection, or null when retrieval is off, not ready, or nothing clears
+     * the similarity gate. Best-effort: errors are swallowed so a chat turn is
+     * never blocked by retrieval. The threshold gate lives in the provider.
+     */
+    private suspend fun retrieveWikipediaContext(query: String): String? {
+        val provider = retrievalProvider ?: return null
+        if (!provider.isReady || query.isBlank()) return null
+
+        val passages = try {
+            provider.search(query)
+        } catch (error: Throwable) {
+            logRepository.log(
+                LogLevel.Error,
+                "Wikipedia retrieval failed",
+                details = error.message,
+                tag = "Retrieval",
+                throwable = error
+            )
+            return null
+        }
+        if (passages.isEmpty()) return null
+
+        return buildString {
+            append("----- BEGIN WIKIPEDIA CONTEXT -----\n")
+            append("Relevant Wikipedia excerpts. Use them if helpful and cite the article titles.\n")
+            passages.forEach { passage ->
+                append("\n# ").append(passage.title).append("\n")
+                append(passage.text.trim()).append("\n")
+            }
+            append("----- END WIKIPEDIA CONTEXT -----")
+        }
     }
 
     private fun buildHistorySelection(

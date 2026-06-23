@@ -6,6 +6,7 @@ import io.ente.ensu.domain.device.ChatDeviceCapability
 import io.ente.ensu.domain.device.DeviceCapabilityProvider
 import io.ente.ensu.domain.device.UnknownDeviceCapabilityProvider
 import io.ente.ensu.domain.llm.LlmProvider
+import io.ente.ensu.domain.llm.RetrievalProvider
 import io.ente.ensu.domain.logging.LogRepository
 import io.ente.ensu.domain.logging.NoOpLogRepository
 import io.ente.ensu.domain.model.Attachment
@@ -27,6 +28,7 @@ class AppStore(
     private val chatRepository: ChatRepository,
     private val chatSyncRepository: ChatSyncRepository? = null,
     private val llmProvider: LlmProvider,
+    private val retrievalProvider: RetrievalProvider? = null,
     private val deviceCapabilityProvider: DeviceCapabilityProvider = UnknownDeviceCapabilityProvider,
     val ensuDefaults: EnsuDefaults,
     private val clock: () -> Long = { System.currentTimeMillis() },
@@ -51,7 +53,8 @@ class AppStore(
         attachmentActions = attachmentActions,
         syncActions = syncActions,
         modelSettingsActions = modelSettingsActions,
-        ensuDefaults = ensuDefaults
+        ensuDefaults = ensuDefaults,
+        retrievalProvider = retrievalProvider
     )
     private val authActions = AuthStoreActions(_state, logRepository) {
         syncActions.syncAfterLogin()

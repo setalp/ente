@@ -151,14 +151,23 @@ Codebase findings (verified by reading source):
 Build order (each layer compiled before the next; build/test deferred while the full index
 bakes to avoid CPU contention):
 
-1. **Rust core embed()** — `inference_rs`: extend `ContextParams` with `embeddings`, add
-   `embed(context, texts) -> Vec<Vec<f32>>` (tokenize → decode → `embeddings_seq_ith(0)` →
-   L2-normalize). Host `cargo test` against EmbeddingGemma GGUF (dim 768, similar texts → high cosine).
-2. **Retrieval core crate** — `rust/crates/ensu/retrieval`: load the prebuilt index
-   (vectors.int8 + meta), cosine top-k, similarity-threshold gate (~0.45).
-3. **uniffi bindings** — expose `embed` + retrieval search to Kotlin.
-4. **Kotlin `RetrievalProvider`** (`:domain` interface, `:data` impl) + index download + DataStore toggle.
-5. **Inject** retrieved passages in `ChatStoreActions.buildPrompt()`; **toggle** in `ChatInputBar`.
+1. ✅ *written (compile-pending)* **Rust core embed()** — `inference_rs`: `ContextParams.embeddings`
+   + `embed(context, texts) -> Vec<Vec<f32>>` (tokenize → decode → `embeddings_seq_ith(0)` → L2-normalize).
+2. ✅ *written (compile-pending)* **Retrieval core crate** — `rust/crates/ensu/retrieval`:
+   loads manifest.json + vectors.i8 + meta.jsonl; cosine top-k with threshold gate.
+3. ✅ *written (compile-pending)* **uniffi bindings** — `embed` exposed on the inference binding;
+   new `retrieval` binding (`io.ente.labs.retrieval`, `RetrievalIndex.open/search`).
+4. ✅ *written (compile-pending)* **Kotlin provider** — `:domain` `RetrievalProvider`/`RetrievedPassage`;
+   `:data` `RustRetrievalProvider` (lazy EmbeddingGemma embed-context + index; query prompt; best-effort).
+5. ✅ *written (compile-pending)* **Injection** — `ChatStoreActions.retrieveWikipediaContext()` injects a
+   system message before the user turn; `RetrievalProvider` threaded (nullable) through `AppStore`.
+
+**Remaining to activate (default-off today):**
+- `AppViewModel`: construct `RustRetrievalProvider(embeddingModelPath, indexDir)` and pass to `AppStore`.
+- Provision assets: EmbeddingGemma GGUF + index dir via `FilePathManager` + download.
+- Per-conversation toggle: `AdvancedSettingsDataStore` flag + state field + `ChatInputBar` control.
+- Android NDK build: add the `retrieval` crate to `build-rust.sh` / uniffi-bindgen list.
+- **Verify**: `cargo build`/`test` the Rust layers, then a device build, once the spike frees the machine.
 
 ## Source selection (v1)
 
