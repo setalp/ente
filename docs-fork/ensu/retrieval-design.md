@@ -146,6 +146,23 @@ user's documents, and on-device is mandatory (private text can't go to a cloud e
 4. **Extend** — chunking/quantization tuning; then structured sources (Wikidata/OpenLibrary
    via the router); then private-notes RAG (on-device write-side indexing + encryption).
 
+## Spike results (Simple-Wiki, EmbeddingGemma)
+
+Validated on a 19.5k-article subset (`docs-fork/ensu/spike/`), real EmbeddingGemma-300m,
+768-dim int8, lead-only:
+
+- **Index size** ~14 MB / 19.5k → **~170 MB at full 240k** (matches Decision 3 estimate).
+- **Retrieval quality** strong: returns the correct article #1 and relevant neighbours
+  (e.g. "what causes the seasons" → Season / Axial tilt / Earth's orbit).
+- **Cross-lingual confirmed**: a German query ("warum ist der himmel blau") retrieved the
+  right English articles — validates the multilingual model choice (Decision 1).
+- **Threshold gate**: factual queries score **~0.48–0.58**; conversational chit-chat
+  ("thanks that was helpful") scores **~0.26**. → start the gate at **~0.45** (Decision 4),
+  tune on the full index.
+- **Data caveat**: cleaned `wikimedia/wikipedia` text strips infobox-templated figures
+  (e.g. Everest's height is missing from the lead) → reinforces routing exact numbers/dates
+  to **Wikidata** rather than prose Wikipedia.
+
 ## Open decisions
 
 Being resolved one at a time; this section updates as each is settled.
