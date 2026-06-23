@@ -4761,6 +4761,7 @@ dependencies = [
 name = "inference_rs"
 version = "0.0.0"
 dependencies = [
+ "ensu-retrieval",
  "futures-util",
  "llama-cpp-2",
  "parking_lot",

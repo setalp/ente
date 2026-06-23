@@ -25,6 +25,11 @@ tokio = { version = "1", features = ["rt", "time"] }
 # which causes Metal to be used for GPU inference.
 #
 # "mtmd" is used on all platforms for enabling multimodal support.
+[dev-dependencies]
+# End-to-end retrieval test (tests/retrieve.rs): embed a query, then search the
+# real prebuilt index. Dev-only — the retrieval crate is not a runtime dep here.
+ensu-retrieval.workspace = true
+
 [target.'cfg(target_os = "macos")'.dependencies]
 llama-cpp-2 = { version = "=0.1.144", default-features = false, features = ["mtmd"] }
 
