@@ -162,6 +162,12 @@ bakes to avoid CPU contention):
 5. ✅ *written (compile-pending)* **Injection** — `ChatStoreActions.retrieveWikipediaContext()` injects a
    system message before the user turn; `RetrievalProvider` threaded (nullable) through `AppStore`.
 
+**Verified (compile + runtime):** All four Rust crates `cargo check` clean (llama.cpp builds
+on macOS/Metal). `embed()` runtime smoke test (`inference/tests/embed.rs`, gated on
+`ENSU_EMBED_GGUF`) passes against `embeddinggemma-300M-Q8_0.gguf`: 768-dim unit vectors,
+cosine(query, relevant)=0.487 vs (query, unrelated)=−0.035. Confirms `llama-cpp-2` v0.1.144
+supports the EmbeddingGemma architecture — no engine bump needed.
+
 **Remaining to activate (default-off today):**
 - `AppViewModel`: construct `RustRetrievalProvider(embeddingModelPath, indexDir)` and pass to `AppStore`.
 - Provision assets: EmbeddingGemma GGUF + index dir via `FilePathManager` + download.
@@ -201,6 +207,10 @@ Validated on a 19.5k-article subset (`docs-fork/ensu/spike/`), real EmbeddingGem
 - **Threshold gate**: factual queries score **~0.48–0.58**; conversational chit-chat
   ("thanks that was helpful") scores **~0.26**. → start the gate at **~0.45** (Decision 4),
   tune on the full index.
+- **Full index built** (235,368 lead-only passages, EmbeddingGemma 768-dim int8, max_chars
+  600): **180.8 MB** vectors + 113 MB meta.jsonl. **Threshold 0.45 confirmed at full scale** —
+  factual queries 0.51–0.58 (inject), chit-chat 0.37 and coding requests 0.41 (correctly
+  gated out). Cross-lingual (DE→EN) holds. Index lives at `spike/index/` (gitignored).
 - **Data caveat**: cleaned `wikimedia/wikipedia` text strips infobox-templated figures
   (e.g. Everest's height is missing from the lead) → reinforces routing exact numbers/dates
   to **Wikidata** rather than prose Wikipedia.
