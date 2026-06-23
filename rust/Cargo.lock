@@ -2452,6 +2452,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ensu-retrieval"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ensu-sync"
 version = "0.0.0"
 dependencies = [
@@ -7422,6 +7430,15 @@ dependencies = [
  "reqwest 0.13.4",
  "reqwest-middleware",
  "tracing",
+]
+
+[[package]]
+name = "retrieval"
+version = "0.0.0"
+dependencies = [
+ "ensu-retrieval",
+ "thiserror 1.0.69",
+ "uniffi",
 ]
 
 [[package]]
