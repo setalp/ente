@@ -28,6 +28,7 @@ pub struct ContextParams {
     pub context_size: Option<i32>,
     pub n_threads: Option<i32>,
     pub n_batch: Option<i32>,
+    pub embeddings: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
@@ -188,6 +189,7 @@ impl From<ContextParams> for core::ContextParams {
             context_size: value.context_size,
             n_threads: value.n_threads,
             n_batch: value.n_batch,
+            embeddings: value.embeddings,
         }
     }
 }
@@ -403,6 +405,14 @@ pub fn tokenize(
 #[uniffi::export]
 pub fn detokenize(model: Arc<ModelHandle>, tokens: Vec<i32>) -> Result<String, InferenceError> {
     core::detokenize(model.handle.as_ref(), tokens).map_err(InferenceError::from)
+}
+
+#[uniffi::export]
+pub fn embed(
+    context: Arc<ContextHandle>,
+    texts: Vec<String>,
+) -> Result<Vec<Vec<f32>>, InferenceError> {
+    core::embed(context.handle.as_ref(), texts).map_err(InferenceError::from)
 }
 
 #[uniffi::export]

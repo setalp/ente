@@ -45,36 +45,31 @@ def extract_lead(text: str, max_chars: int) -> str:
     return lead[:max_chars].strip()
 
 
-def make_encoders(model_name: str, device: str | None):
-    """Return (encode_docs, encode_query) closures.
+def make_encoder(model_name: str, device: str | None, fp16: bool):
+    """Return (encode_docs, dim).
 
-    Uses sentence-transformers encode_document/encode_query when the model
-    registers retrieval prompts (EmbeddingGemma does); falls back to plain
-    encode otherwise (e.g. MiniLM for a no-gating smoke test).
+    Uses sentence-transformers encode with the model's "document" retrieval
+    prompt when present (EmbeddingGemma registers it); falls back to plain
+    encode otherwise (e.g. MiniLM for a no-gating smoke test). fp16 roughly
+    halves embedding time on MPS with no meaningful retrieval-quality loss.
     """
     from sentence_transformers import SentenceTransformer
+    import torch
 
-    model = SentenceTransformer(model_name, device=device)
+    dtype = torch.float16 if fp16 else None
+    model = SentenceTransformer(model_name, device=device,
+                                model_kwargs={"torch_dtype": dtype} if dtype else {})
     dim = model.get_sentence_embedding_dimension()
-    has_prompts = bool(getattr(model, "prompts", None)) and {
-        "query",
-        "document",
-    } <= set(getattr(model, "prompts", {}) or {})
+    has_prompts = {"query", "document"} <= set(getattr(model, "prompts", {}) or {})
 
     def encode_docs(texts, batch_size):
-        kw = dict(batch_size=batch_size, show_progress_bar=True,
+        kw = dict(batch_size=batch_size, show_progress_bar=False,
                   normalize_embeddings=True, convert_to_numpy=True)
         if has_prompts:
             return model.encode(texts, prompt_name="document", **kw)
         return model.encode(texts, **kw)
 
-    def encode_query(text):
-        kw = dict(normalize_embeddings=True, convert_to_numpy=True)
-        if has_prompts:
-            return model.encode([text], prompt_name="query", **kw)[0]
-        return model.encode([text], **kw)[0]
-
-    return encode_docs, encode_query, dim, model_name
+    return encode_docs, dim
 
 
 def quantize_int8(vecs: np.ndarray) -> np.ndarray:
@@ -95,7 +90,12 @@ def main() -> int:
                     help="Char budget for the lead passage.")
     ap.add_argument("--min-chars", type=int, default=80,
                     help="Skip stubs whose lead is shorter than this.")
-    ap.add_argument("--batch-size", type=int, default=64)
+    ap.add_argument("--batch-size", type=int, default=16)
+    ap.add_argument("--shard-size", type=int, default=10000,
+                    help="Passages per checkpoint shard (resumable, observable).")
+    ap.add_argument("--fp16", action="store_true", default=True,
+                    help="Run the model in float16 (~2x faster on MPS). On by default.")
+    ap.add_argument("--no-fp16", dest="fp16", action="store_false")
     ap.add_argument("--device", default=None, help="cpu | mps | cuda (default: auto)")
     args = ap.parse_args()
 
@@ -114,33 +114,50 @@ def main() -> int:
         rows.append({"id": r["id"], "title": r["title"], "url": r["url"], "text": lead})
         # Prepend the title so it influences the embedding (cheap title boost).
         docs.append(f"{r['title']}. {lead}")
-    print(f"      kept {len(rows):,} passages (dropped stubs).", flush=True)
+    total = len(rows)
+    print(f"      kept {total:,} passages (dropped stubs).", flush=True)
 
-    print(f"[3/4] embedding with {args.model} ...", flush=True)
-    encode_docs, _, dim, model_name = make_encoders(args.model, args.device)
-    vecs = encode_docs(docs, args.batch_size).astype(np.float32)
-    q = quantize_int8(vecs)
+    # Sharded, resumable embedding: each shard's int8 vectors are written to
+    # parts/ immediately, so progress is visible and a restart skips finished
+    # shards. The model is loaded lazily, only if some shard is missing.
+    parts = args.out / "parts"
+    parts.mkdir(parents=True, exist_ok=True)
+    n_shards = (total + args.shard_size - 1) // args.shard_size
+    encode_docs = dim = None
+    print(f"[3/4] embedding with {args.model} (fp16={args.fp16}) "
+          f"in {n_shards} shards of {args.shard_size} ...", flush=True)
+    for s in range(n_shards):
+        part = parts / f"vec_{s:04d}.npy"
+        if part.exists():
+            print(f"      shard {s+1}/{n_shards}: cached, skipping.", flush=True)
+            continue
+        if encode_docs is None:  # lazy model load
+            encode_docs, dim = make_encoder(args.model, args.device, args.fp16)
+        lo, hi = s * args.shard_size, min((s + 1) * args.shard_size, total)
+        vecs = encode_docs(docs[lo:hi], args.batch_size).astype(np.float32)
+        np.save(part, quantize_int8(vecs))
+        print(f"      shard {s+1}/{n_shards}: embedded {hi:,}/{total:,} "
+              f"({100*hi//total}%).", flush=True)
 
-    print(f"[4/4] writing index to {args.out}/ ...", flush=True)
-    args.out.mkdir(parents=True, exist_ok=True)
+    print(f"[4/4] merging shards -> {args.out}/ ...", flush=True)
+    q = np.concatenate([np.load(parts / f"vec_{s:04d}.npy") for s in range(n_shards)])
+    if dim is None:  # fully resumed from cache; infer dim from shards
+        dim = q.shape[1]
     np.save(args.out / "vectors.int8.npy", q)
+    # Raw int8 (row-major count*dim) for the on-device Rust retrieval crate,
+    # which reads manifest.json + vectors.i8 + meta.jsonl.
+    q.tofile(args.out / "vectors.i8")
     with (args.out / "meta.jsonl").open("w") as f:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     manifest = {
-        "model": model_name,
-        "dim": int(dim),
-        "count": len(rows),
-        "quant": "int8",
-        "scale": 127,
+        "model": args.model, "dim": int(dim), "count": total,
+        "quant": "int8", "scale": 127, "fp16": args.fp16,
         "dataset": f"{args.dataset}:{args.config}",
-        "granularity": "lead-only",
-        "max_chars": args.max_chars,
+        "granularity": "lead-only", "max_chars": args.max_chars,
     }
     (args.out / "manifest.json").write_text(json.dumps(manifest, indent=2))
-
-    mb = q.nbytes / 1e6
-    print(f"done. {len(rows):,} vectors x {dim}d int8 = {mb:.1f} MB "
+    print(f"done. {total:,} vectors x {dim}d int8 = {q.nbytes/1e6:.1f} MB "
           f"(+ meta.jsonl).", flush=True)
     return 0
 

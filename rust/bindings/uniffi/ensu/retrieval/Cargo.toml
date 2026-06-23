@@ -1,0 +1,11 @@
+[package]
+name = "retrieval"
+edition = "2024"
+
+[lib]
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+ensu-retrieval.workspace = true
+thiserror = "1"
+uniffi = { version = "0.31.0" }
