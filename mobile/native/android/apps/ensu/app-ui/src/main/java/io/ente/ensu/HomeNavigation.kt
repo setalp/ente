@@ -158,6 +158,10 @@ internal fun HomeNavigation(
                         isLoggedIn = appState.auth.isLoggedIn,
                         userEmail = appState.auth.email,
                         isAdvancedUnlocked = appState.developerSettings.isAdvancedUnlocked,
+                        wikipediaRetrievalEnabled = appState.developerSettings.wikipediaRetrievalEnabled,
+                        onToggleWikipediaRetrieval = { enabled ->
+                            advancedSettingsDataStore.persistWikipediaRetrievalEnabled(enabled)
+                        },
                         onOpenLogs = { navController.navigate(HomeRoute.Logs) },
                         onOpenModelSettings = { navController.navigate(HomeRoute.ModelSettings) },
                         onOpenSystemPromptSettings = { navController.navigate(HomeRoute.SystemPromptSettings) },

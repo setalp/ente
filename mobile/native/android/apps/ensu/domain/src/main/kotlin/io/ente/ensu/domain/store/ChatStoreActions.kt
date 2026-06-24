@@ -1132,6 +1132,7 @@ internal class ChatStoreActions(
      * never blocked by retrieval. The threshold gate lives in the provider.
      */
     private suspend fun retrieveWikipediaContext(query: String): String? {
+        if (!state.value.developerSettings.wikipediaRetrievalEnabled) return null
         val provider = retrievalProvider ?: return null
         if (!provider.isReady || query.isBlank()) return null
 

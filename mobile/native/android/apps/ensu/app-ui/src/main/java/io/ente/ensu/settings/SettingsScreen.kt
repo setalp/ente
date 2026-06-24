@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -49,6 +50,8 @@ fun SettingsScreen(
     isLoggedIn: Boolean,
     userEmail: String?,
     isAdvancedUnlocked: Boolean,
+    wikipediaRetrievalEnabled: Boolean,
+    onToggleWikipediaRetrieval: (Boolean) -> Unit,
     onOpenLogs: () -> Unit,
     onOpenModelSettings: () -> Unit,
     onOpenSystemPromptSettings: () -> Unit,
@@ -189,6 +192,17 @@ fun SettingsScreen(
         }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(EnsuSpacing.sm.dp)) {
+            if (query.isBlank()) {
+                item(key = "wikipedia-retrieval-toggle") {
+                    SettingsToggleRow(
+                        title = "Wikipedia context",
+                        subtitle = "Augment factual answers with on-device Simple Wikipedia",
+                        checked = wikipediaRetrievalEnabled,
+                        onCheckedChange = onToggleWikipediaRetrieval
+                    )
+                }
+            }
+
             items(filteredItems, key = { it.title }) { item ->
                 SettingsRow(item)
             }
@@ -239,6 +253,31 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SettingsToggleRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(EnsuCornerRadius.card.dp))
+            .background(EnsuColor.fillFaint())
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = EnsuSpacing.lg.dp, vertical = EnsuSpacing.lg.dp),
+        horizontalArrangement = Arrangement.spacedBy(EnsuSpacing.md.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = EnsuTypography.body, color = EnsuColor.textPrimary())
+            Text(text = subtitle, style = EnsuTypography.small, color = EnsuColor.textMuted())
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
