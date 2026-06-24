@@ -67,6 +67,13 @@ class RustRetrievalProvider(
             // in the same space as the index, which was built with the matching
             // document prompt (see build_index.py).
             val embedded = embed(ctx, listOf(QUERY_PROMPT_PREFIX + query))
+
+            // Free EmbeddingGemma immediately: it's only needed for this one
+            // embedding, and the chat model generation that follows is heavy on
+            // RAM. Holding both models resident thrashes swap on-device. The
+            // index stays loaded (cheap to keep, expensive to reload).
+            releaseEmbeddingModel()
+
             val queryVector = embedded.firstOrNull() ?: return@withContext emptyList()
 
             idx.search(queryVector, k.toUInt(), threshold).map { hit ->
@@ -113,6 +120,16 @@ class RustRetrievalProvider(
                     ),
                 )
             }
+        }
+    }
+
+    /** Free just the embedding model + context, keeping the index loaded. */
+    private suspend fun releaseEmbeddingModel() {
+        loadMutex.withLock {
+            embeddingContext?.destroy()
+            embeddingContext = null
+            embeddingModel?.destroy()
+            embeddingModel = null
         }
     }
 
