@@ -16,6 +16,7 @@ import io.ente.ensu.data.llm.EnsuRustDefaults
 import io.ente.ensu.data.logging.FileLogRepository
 import io.ente.ensu.data.storage.CredentialStore
 import io.ente.ensu.data.llm.InferenceRsProvider
+import io.ente.ensu.data.llm.RustRetrievalProvider
 import io.ente.ensu.data.chat.RustChatRepository
 import io.ente.ensu.data.chat.RustChatSyncRepository
 import io.ente.ensu.domain.model.LogLevel
@@ -41,6 +42,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         legacyModelDir = File(application.filesDir, "llm"),
         deviceCapabilityProvider = deviceCapabilityProvider
     )
+    // On-device Wikipedia retrieval. No-ops until the embedding model + index are
+    // present under the rag/ dir (sideload via adb push for now). The similarity
+    // gate inside the provider decides when retrieved context is actually injected.
+    private val retrievalProvider = RustRetrievalProvider(
+        embeddingModelPath = File(resolveRetrievalDir(application), EMBEDDING_MODEL_FILE),
+        indexDir = File(resolveRetrievalDir(application), "index")
+    )
     private val chatRepository = RustChatRepository(application, credentialStore)
     private val chatSyncRepository = RustChatSyncRepository(
         context = application,
@@ -64,6 +72,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         chatRepository = chatRepository,
         chatSyncRepository = chatSyncRepository,
         llmProvider = llmProvider,
+        retrievalProvider = retrievalProvider,
         deviceCapabilityProvider = deviceCapabilityProvider,
         ensuDefaults = ensuDefaults,
         logRepository = logRepository
@@ -154,6 +163,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ?: application.getExternalFilesDir(null)
             ?: application.filesDir
         return File(root, "llm")
+    }
+
+    // Sideload target: adb push the embedding GGUF + index/ here. Resolves to
+    // <external-files>/Download/rag/ (Android/data/<pkg>/files/Download/rag).
+    private fun resolveRetrievalDir(application: Application): File {
+        val root = application.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            ?: application.getExternalFilesDir(null)
+            ?: application.filesDir
+        return File(root, "rag")
+    }
+
+    companion object {
+        private const val EMBEDDING_MODEL_FILE = "embeddinggemma-300M-Q8_0.gguf"
     }
 
     private fun fallbackEnsuDefaults() = io.ente.ensu.domain.model.EnsuDefaults(
