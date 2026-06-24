@@ -13,9 +13,11 @@
 //! Brute force is fine for v1: ~240k passages × 768 dims is a few hundred MB of
 //! int8 and a single linear scan per query; no ANN structure needed yet.
 
+use memmap2::Mmap;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fs;
+use std::fs::File;
 use std::path::Path;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -45,7 +47,11 @@ pub struct SearchHit {
 pub struct RetrievalIndex {
     dim: usize,
     inv_scale: f32,
-    vectors: Vec<i8>,
+    // Memory-mapped int8 vectors (row-major count*dim). mmap keeps these pages
+    // clean/OS-evictable instead of ~180 MB of dirty heap, which matters when
+    // the chat model is also resident on-device. Raw bytes are two's-complement
+    // int8 read as u8.
+    vectors: Mmap,
     passages: Vec<Passage>,
 }
 
@@ -64,14 +70,16 @@ impl RetrievalIndex {
             return Err("Manifest dim/scale must be non-zero".to_string());
         }
 
-        let raw = fs::read(dir.join("vectors.i8"))
-            .map_err(|err| format!("Failed to read vectors.i8: {err}"))?;
-        // Raw file bytes are u8; reinterpret as two's-complement int8.
-        let vectors: Vec<i8> = raw.into_iter().map(|byte| byte as i8).collect();
+        let file = File::open(dir.join("vectors.i8"))
+            .map_err(|err| format!("Failed to open vectors.i8: {err}"))?;
+        // SAFETY: the index is a read-only asset; we never mutate the mapping,
+        // and concurrent external truncation of a shipped asset isn't expected.
+        let vectors = unsafe { Mmap::map(&file) }
+            .map_err(|err| format!("Failed to mmap vectors.i8: {err}"))?;
         let expected = manifest.count * manifest.dim;
         if vectors.len() != expected {
             return Err(format!(
-                "vectors.i8 has {} values, expected count*dim = {}",
+                "vectors.i8 has {} bytes, expected count*dim = {}",
                 vectors.len(),
                 expected
             ));
@@ -134,7 +142,8 @@ impl RetrievalIndex {
         for (row, chunk) in self.vectors.chunks_exact(self.dim).enumerate() {
             let mut dot = 0.0f32;
             for d in 0..self.dim {
-                dot += query[d] * (f32::from(chunk[d]) * self.inv_scale);
+                // mmap bytes are u8; reinterpret as two's-complement int8.
+                dot += query[d] * (f32::from(chunk[d] as i8) * self.inv_scale);
             }
             if dot >= threshold {
                 scored.push((dot, row));

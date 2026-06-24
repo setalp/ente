@@ -23,10 +23,14 @@ interface RetrievalProvider {
     ): List<RetrievedPassage>
 
     companion object {
-        const val DEFAULT_K = 3
+        const val DEFAULT_K = 2
 
-        /** Empirical from the spike: factual queries ~0.5, chit-chat ~0.26. */
-        const val DEFAULT_THRESHOLD = 0.45f
+        /**
+         * Raised 0.45 -> 0.50 after the A/B study: real matches landed at
+         * 0.55-0.70 while distractors that contaminated answers (e.g. the
+         * Mansa Musa case) clustered at 0.45-0.47. 0.50 drops them cleanly.
+         */
+        const val DEFAULT_THRESHOLD = 0.50f
     }
 }
 
