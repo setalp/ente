@@ -42,7 +42,7 @@ class AppStore(
     private val messageStore = mutableMapOf<String, MutableList<ChatMessage>>()
     private val attachmentActions = AttachmentStoreActions(_state, chatSyncRepository, messageStore)
     private val modelSettingsActions =
-        ModelSettingsActions(_state, sessionPreferences, llmProvider, logRepository, ensuDefaults)
+        ModelSettingsActions(_state, sessionPreferences, llmProvider, logRepository, ensuDefaults, retrievalProvider)
     private val syncActions = SyncStoreActions(_state, chatSyncRepository, logRepository)
     private val chatActions = ChatStoreActions(
         state = _state,

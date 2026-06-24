@@ -3,6 +3,7 @@ package io.ente.ensu.domain.store
 import io.ente.ensu.domain.device.isChatSupported
 import io.ente.ensu.domain.llm.LlmModelTarget
 import io.ente.ensu.domain.llm.LlmProvider
+import io.ente.ensu.domain.llm.RetrievalProvider
 import io.ente.ensu.domain.logging.LogRepository
 import io.ente.ensu.domain.model.EnsuDefaults
 import io.ente.ensu.domain.model.LogLevel
@@ -22,7 +23,8 @@ internal class ModelSettingsActions(
     private val sessionPreferences: SessionPreferences,
     private val llmProvider: LlmProvider,
     private val logRepository: LogRepository,
-    private val ensuDefaults: EnsuDefaults
+    private val ensuDefaults: EnsuDefaults,
+    private val retrievalProvider: RetrievalProvider? = null
 ) {
     private var scope: CoroutineScope? = null
     private var modelDownloadJob: Job? = null
@@ -233,6 +235,9 @@ internal class ModelSettingsActions(
                         delay(retryDelayMs(retryCount))
                     }
                 }
+                // Bundle the Wikipedia retrieval assets into the same download so
+                // model + data are provisioned together (best-effort).
+                downloadRetrievalAssetsIfNeeded()
             } catch (err: Throwable) {
                 val cancelled = err is kotlinx.coroutines.CancellationException ||
                     err.message?.contains("cancel", ignoreCase = true) == true
@@ -268,6 +273,51 @@ internal class ModelSettingsActions(
             } finally {
                 modelDownloadJob = null
                 refreshModelDownloadInfo()
+            }
+        }
+    }
+
+    /**
+     * Download the Wikipedia retrieval assets as a continuation of the model
+     * download (same progress UI). Best-effort: a failure here must not fail the
+     * model download — the chat model is already usable without retrieval.
+     */
+    private suspend fun downloadRetrievalAssetsIfNeeded() {
+        if (!state.value.developerSettings.wikipediaRetrievalEnabled) return
+        val provider = retrievalProvider ?: return
+        if (provider.isReady) return
+        try {
+            provider.downloadAssets { percent ->
+                state.update { appState ->
+                    appState.copy(
+                        chat = appState.chat.copy(
+                            isDownloading = true,
+                            downloadPercent = percent,
+                            downloadStatus = "Downloading Wikipedia data... $percent%"
+                        )
+                    )
+                }
+            }
+            state.update { appState ->
+                appState.copy(
+                    chat = appState.chat.copy(
+                        isDownloading = false,
+                        downloadPercent = null,
+                        downloadStatus = null
+                    ),
+                    retrievalAssets = appState.retrievalAssets.copy(ready = true, downloading = false, percent = 100)
+                )
+            }
+        } catch (err: Throwable) {
+            logRepository.log(
+                LogLevel.Warning,
+                "Wikipedia data download failed",
+                details = err.message,
+                tag = "Retrieval",
+                throwable = err
+            )
+            state.update { appState ->
+                appState.copy(chat = appState.chat.copy(isDownloading = false, downloadStatus = null))
             }
         }
     }
