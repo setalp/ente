@@ -1149,6 +1149,13 @@ internal class ChatStoreActions(
         }
         if (passages.isEmpty()) return null
 
+        logRepository.log(
+            LogLevel.Info,
+            "Wikipedia retrieval injected ${passages.size} passage(s)",
+            details = passages.joinToString { "${it.title} (${it.score})" },
+            tag = "Retrieval"
+        )
+
         return buildString {
             append("----- BEGIN WIKIPEDIA CONTEXT -----\n")
             append("Relevant Wikipedia excerpts. Use them if helpful and cite the article titles.\n")
