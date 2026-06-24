@@ -671,6 +671,22 @@ internal class ChatStoreActions(
                 tokenCount.toDouble() / (totalTimeMs / 1000.0)
             } else null
 
+            // Full Q&A record for analysing whether Wikipedia retrieval improves
+            // answers (debug analysis — logs chat content to the local log file).
+            // Pair with the adjacent [Retrieval] line for the injected passages.
+            logRepository.log(
+                LogLevel.Info,
+                "QA",
+                details = buildString {
+                    append("rag=").append(state.value.developerSettings.wikipediaRetrievalEnabled)
+                    if (interrupted) append(" interrupted=true")
+                    tokensPerSecond?.let { append(" tok/s=").append(String.format("%.1f", it)) }
+                    append("\nQ: ").append(parentMessage.text)
+                    append("\nA: ").append(finalText)
+                },
+                tag = "QA"
+            )
+
             if (shouldUpdateUi) {
                 val inserted = runCatching {
                     chatRepository.insertMessage(
