@@ -13,6 +13,13 @@ interface RetrievalProvider {
     val isReady: Boolean
 
     /**
+     * Download the embedding model + index assets onto the device (for shared
+     * builds where they aren't sideloaded). [onProgress] receives 0..100.
+     * Skips files already present at the expected size; throws on failure.
+     */
+    suspend fun downloadAssets(onProgress: (percent: Int) -> Unit)
+
+    /**
      * Embed [query] and return up to [k] passages with cosine score >= [threshold],
      * sorted by descending score. Returns empty if not ready or nothing clears the gate.
      */

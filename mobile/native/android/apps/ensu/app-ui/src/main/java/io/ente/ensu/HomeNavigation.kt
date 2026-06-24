@@ -162,6 +162,8 @@ internal fun HomeNavigation(
                         onToggleWikipediaRetrieval = { enabled ->
                             advancedSettingsDataStore.persistWikipediaRetrievalEnabled(enabled)
                         },
+                        retrievalAssets = appState.retrievalAssets,
+                        onDownloadRetrievalAssets = { store.downloadRetrievalAssets() },
                         onOpenLogs = { navController.navigate(HomeRoute.Logs) },
                         onOpenModelSettings = { navController.navigate(HomeRoute.ModelSettings) },
                         onOpenSystemPromptSettings = { navController.navigate(HomeRoute.SystemPromptSettings) },

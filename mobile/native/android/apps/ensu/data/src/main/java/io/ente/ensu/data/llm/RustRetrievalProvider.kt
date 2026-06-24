@@ -18,7 +18,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
+import java.io.IOException
 
 /**
  * On-device Wikipedia retrieval.
@@ -123,6 +126,63 @@ class RustRetrievalProvider(
         }
     }
 
+    override suspend fun downloadAssets(onProgress: (Int) -> Unit): Unit = withContext(ioDispatcher) {
+        indexDir.mkdirs()
+        embeddingModelPath.parentFile?.mkdirs()
+
+        // url filename == on-device filename, so derive both from the targets.
+        val targets = listOf(
+            embeddingModelPath,
+            File(indexDir, "manifest.json"),
+            File(indexDir, "vectors.i8"),
+            File(indexDir, "meta.jsonl")
+        )
+        val client = OkHttpClient()
+        val sizes = targets.map { headContentLength(client, assetUrl(it.name)) }
+        val total = sizes.sum().coerceAtLeast(1L)
+        var done = 0L
+
+        for ((i, target) in targets.withIndex()) {
+            if (target.exists() && sizes[i] > 0 && target.length() == sizes[i]) {
+                done += sizes[i]
+                onProgress(((done * 100) / total).toInt().coerceIn(0, 100))
+                continue
+            }
+            val tmp = File(target.parentFile, "${target.name}.part")
+            client.newCall(Request.Builder().url(assetUrl(target.name)).build()).execute().use { resp ->
+                if (!resp.isSuccessful) throw IOException("Download failed (${resp.code}) for ${target.name}")
+                val body = resp.body ?: throw IOException("Empty body for ${target.name}")
+                tmp.outputStream().use { out ->
+                    body.byteStream().use { input ->
+                        val buf = ByteArray(1 shl 16)
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            out.write(buf, 0, n)
+                            done += n
+                            onProgress(((done * 100) / total).toInt().coerceIn(0, 100))
+                        }
+                    }
+                }
+            }
+            if (!tmp.renameTo(target)) {
+                tmp.copyTo(target, overwrite = true)
+                tmp.delete()
+            }
+        }
+        onProgress(100)
+    }
+
+    private fun assetUrl(fileName: String) = "$ASSET_BASE_URL/$fileName"
+
+    private fun headContentLength(client: OkHttpClient, url: String): Long = try {
+        client.newCall(Request.Builder().url(url).head().build()).execute().use { resp ->
+            resp.header("Content-Length")?.toLongOrNull() ?: 0L
+        }
+    } catch (_: Throwable) {
+        0L
+    }
+
     /** Free just the embedding model + context, keeping the index loaded. */
     private suspend fun releaseEmbeddingModel() {
         loadMutex.withLock {
@@ -146,5 +206,7 @@ class RustRetrievalProvider(
     companion object {
         private const val QUERY_PROMPT_PREFIX = "task: search result | query: "
         private const val EMBED_CONTEXT_SIZE = 512
+        private const val ASSET_BASE_URL =
+            "https://github.com/setalp/ensu-rag-assets/releases/download/v1"
     }
 }

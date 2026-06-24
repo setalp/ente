@@ -52,6 +52,8 @@ fun SettingsScreen(
     isAdvancedUnlocked: Boolean,
     wikipediaRetrievalEnabled: Boolean,
     onToggleWikipediaRetrieval: (Boolean) -> Unit,
+    retrievalAssets: io.ente.ensu.domain.state.RetrievalAssetsState,
+    onDownloadRetrievalAssets: () -> Unit,
     onOpenLogs: () -> Unit,
     onOpenModelSettings: () -> Unit,
     onOpenSystemPromptSettings: () -> Unit,
@@ -201,6 +203,16 @@ fun SettingsScreen(
                         onCheckedChange = onToggleWikipediaRetrieval
                     )
                 }
+                item(key = "wikipedia-retrieval-data") {
+                    val a = retrievalAssets
+                    val (label, sub, onClick) = when {
+                        a.downloading -> Triple("Downloading Wikipedia data… ${a.percent}%", "~600 MB", null)
+                        a.ready -> Triple("Wikipedia data ready", "Embedding model + index downloaded", null)
+                        a.error != null -> Triple("Download failed — tap to retry", a.error!!, onDownloadRetrievalAssets)
+                        else -> Triple("Download Wikipedia data", "~600 MB · required for Wikipedia context", onDownloadRetrievalAssets)
+                    }
+                    SettingsStatusRow(title = label, subtitle = sub, onClick = onClick)
+                }
             }
 
             items(filteredItems, key = { it.title }) { item ->
@@ -278,6 +290,24 @@ private fun SettingsToggleRow(
             Text(text = subtitle, style = EnsuTypography.small, color = EnsuColor.textMuted())
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun SettingsStatusRow(title: String, subtitle: String, onClick: (() -> Unit)?) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(EnsuCornerRadius.card.dp))
+            .background(EnsuColor.fillFaint())
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = EnsuSpacing.lg.dp, vertical = EnsuSpacing.lg.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = EnsuTypography.body, color = EnsuColor.textPrimary())
+            Text(text = subtitle, style = EnsuTypography.small, color = EnsuColor.textMuted())
+        }
     }
 }
 
