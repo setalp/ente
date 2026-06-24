@@ -198,6 +198,11 @@ internal class ModelSettingsActions(
                 initialPercent = if (isDownloaded) null else 0,
                 initialStatus = if (isDownloaded) null else "Starting download..."
             )
+            // If the Wikipedia assets still need fetching, keep the download UI up
+            // (don't mark the model "ready", which would reveal the chat screen)
+            // until the bundled RAG download below also finishes.
+            val willDownloadRetrieval = state.value.developerSettings.wikipediaRetrievalEnabled &&
+                retrievalProvider?.isReady == false
             try {
                 var retryCount = 0
                 while (true) {
@@ -216,10 +221,10 @@ internal class ModelSettingsActions(
                             state.update { appState ->
                                 appState.copy(
                                     chat = appState.chat.copy(
-                                        isDownloading = resolvedProgress.isDownloading,
+                                        isDownloading = if (resolvedProgress.isFinished && willDownloadRetrieval) true else resolvedProgress.isDownloading,
                                         downloadPercent = resolvedProgress.percent,
                                         downloadStatus = resolvedProgress.status,
-                                        isModelDownloaded = if (resolvedProgress.isFinished) true else appState.chat.isModelDownloaded,
+                                        isModelDownloaded = if (resolvedProgress.isFinished && !willDownloadRetrieval) true else appState.chat.isModelDownloaded,
                                         modelDownloadSizeBytes = if (resolvedProgress.isFinished) null else appState.chat.modelDownloadSizeBytes
                                     )
                                 )
@@ -238,6 +243,20 @@ internal class ModelSettingsActions(
                 // Bundle the Wikipedia retrieval assets into the same download so
                 // model + data are provisioned together (best-effort).
                 downloadRetrievalAssetsIfNeeded()
+                // Atomically reveal chat once both are done (single update avoids
+                // a flicker back to the download CTA between the two phases).
+                if (willDownloadRetrieval) {
+                    state.update { appState ->
+                        appState.copy(
+                            chat = appState.chat.copy(
+                                isDownloading = false,
+                                downloadPercent = null,
+                                downloadStatus = null,
+                                isModelDownloaded = true
+                            )
+                        )
+                    }
+                }
             } catch (err: Throwable) {
                 val cancelled = err is kotlinx.coroutines.CancellationException ||
                     err.message?.contains("cancel", ignoreCase = true) == true
@@ -298,13 +317,10 @@ internal class ModelSettingsActions(
                     )
                 }
             }
+            // Mark assets ready; the caller does the atomic chat reveal so there's
+            // no flicker between "model done" and "data done".
             state.update { appState ->
                 appState.copy(
-                    chat = appState.chat.copy(
-                        isDownloading = false,
-                        downloadPercent = null,
-                        downloadStatus = null
-                    ),
                     retrievalAssets = appState.retrievalAssets.copy(ready = true, downloading = false, percent = 100)
                 )
             }
@@ -316,9 +332,6 @@ internal class ModelSettingsActions(
                 tag = "Retrieval",
                 throwable = err
             )
-            state.update { appState ->
-                appState.copy(chat = appState.chat.copy(isDownloading = false, downloadStatus = null))
-            }
         }
     }
 
