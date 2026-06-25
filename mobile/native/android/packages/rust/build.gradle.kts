@@ -87,7 +87,12 @@ fun registerBuildRustJni(
 val buildRustJniDebug = registerBuildRustJni(
     taskName = "buildRustJniDebug",
     outputDir = debugJniLibsDir,
-    resolveAbis = { listOf(connectedDeviceAbi() ?: hostAbi()) },
+    // Single ABI for fast iteration; -Pensu.allAbis builds all (for a shareable
+    // multi-ABI debug APK). Must match app-ui's debugAbis / abiFilters.
+    resolveAbis = {
+        if (project.hasProperty("ensu.allAbis")) knownAbis
+        else listOf(connectedDeviceAbi() ?: hostAbi())
+    },
 )
 
 val buildRustJniRelease = registerBuildRustJni(
