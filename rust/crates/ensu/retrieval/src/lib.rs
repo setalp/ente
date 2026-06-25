@@ -76,7 +76,10 @@ impl RetrievalIndex {
         // and concurrent external truncation of a shipped asset isn't expected.
         let vectors = unsafe { Mmap::map(&file) }
             .map_err(|err| format!("Failed to mmap vectors.i8: {err}"))?;
-        let expected = manifest.count * manifest.dim;
+        let expected = manifest
+            .count
+            .checked_mul(manifest.dim)
+            .ok_or_else(|| "manifest count*dim overflows usize".to_string())?;
         if vectors.len() != expected {
             return Err(format!(
                 "vectors.i8 has {} bytes, expected count*dim = {}",
@@ -150,8 +153,16 @@ impl RetrievalIndex {
             }
         }
 
-        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal));
-        scored.truncate(k);
+        // Partial-select the top-k instead of fully sorting every above-threshold
+        // hit, then sort just those k.
+        let by_score_desc = |a: &(f32, usize), b: &(f32, usize)| {
+            b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal)
+        };
+        if scored.len() > k {
+            scored.select_nth_unstable_by(k - 1, by_score_desc);
+            scored.truncate(k);
+        }
+        scored.sort_unstable_by(by_score_desc);
 
         Ok(scored
             .into_iter()

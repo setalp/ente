@@ -820,10 +820,13 @@ pub fn embed(context: &ContextHandle, texts: Vec<String>) -> Result<Vec<Vec<f32>
                 .map(|value| value * value)
                 .sum::<f32>()
                 .sqrt();
-            if norm > 0.0 {
-                for value in &mut vector {
-                    *value /= norm;
-                }
+            // Reject a zero/NaN-norm embedding rather than emit an un-normalized
+            // (e.g. all-zero) vector that would silently match nothing in search.
+            if !(norm > 0.0) {
+                return Err("Embedding has zero or invalid norm".to_string());
+            }
+            for value in &mut vector {
+                *value /= norm;
             }
             out.push(vector);
         }
