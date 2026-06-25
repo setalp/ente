@@ -5,7 +5,7 @@ questions are grounded in a Simple-English-Wikipedia index that runs entirely on
 the phone (no server). See `docs-fork/ensu/SUMMARY.md` for the A/B results.
 
 ## Requirements
-- An **Android phone, arm64** (basically any phone from ~2017 on), **Android 7+**.
+- **Any Android phone, Android 7+** (the APK is multi-ABI: arm64, armv7, x86_64).
 - **~2.5 GB free space** and **Wi-Fi** (first launch downloads ~1.8 GB).
 
 ## Install
