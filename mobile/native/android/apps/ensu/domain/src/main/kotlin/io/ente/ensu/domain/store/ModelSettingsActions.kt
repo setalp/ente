@@ -3,6 +3,7 @@ package io.ente.ensu.domain.store
 import io.ente.ensu.domain.device.isChatSupported
 import io.ente.ensu.domain.llm.LlmModelTarget
 import io.ente.ensu.domain.llm.LlmProvider
+import io.ente.ensu.domain.llm.RetrievalProvider
 import io.ente.ensu.domain.logging.LogRepository
 import io.ente.ensu.domain.model.EnsuDefaults
 import io.ente.ensu.domain.model.LogLevel
@@ -22,7 +23,8 @@ internal class ModelSettingsActions(
     private val sessionPreferences: SessionPreferences,
     private val llmProvider: LlmProvider,
     private val logRepository: LogRepository,
-    private val ensuDefaults: EnsuDefaults
+    private val ensuDefaults: EnsuDefaults,
+    private val retrievalProvider: RetrievalProvider? = null
 ) {
     private var scope: CoroutineScope? = null
     private var modelDownloadJob: Job? = null
@@ -196,6 +198,11 @@ internal class ModelSettingsActions(
                 initialPercent = if (isDownloaded) null else 0,
                 initialStatus = if (isDownloaded) null else "Starting download..."
             )
+            // If the Wikipedia assets still need fetching, keep the download UI up
+            // (don't mark the model "ready", which would reveal the chat screen)
+            // until the bundled RAG download below also finishes.
+            val willDownloadRetrieval = state.value.developerSettings.wikipediaRetrievalEnabled &&
+                retrievalProvider?.isReady == false
             try {
                 var retryCount = 0
                 while (true) {
@@ -214,10 +221,10 @@ internal class ModelSettingsActions(
                             state.update { appState ->
                                 appState.copy(
                                     chat = appState.chat.copy(
-                                        isDownloading = resolvedProgress.isDownloading,
+                                        isDownloading = if (resolvedProgress.isFinished && willDownloadRetrieval) true else resolvedProgress.isDownloading,
                                         downloadPercent = resolvedProgress.percent,
                                         downloadStatus = resolvedProgress.status,
-                                        isModelDownloaded = if (resolvedProgress.isFinished) true else appState.chat.isModelDownloaded,
+                                        isModelDownloaded = if (resolvedProgress.isFinished && !willDownloadRetrieval) true else appState.chat.isModelDownloaded,
                                         modelDownloadSizeBytes = if (resolvedProgress.isFinished) null else appState.chat.modelDownloadSizeBytes
                                     )
                                 )
@@ -231,6 +238,23 @@ internal class ModelSettingsActions(
 
                         retryCount += 1
                         delay(retryDelayMs(retryCount))
+                    }
+                }
+                // Bundle the Wikipedia retrieval assets into the same download so
+                // model + data are provisioned together (best-effort).
+                downloadRetrievalAssetsIfNeeded()
+                // Atomically reveal chat once both are done (single update avoids
+                // a flicker back to the download CTA between the two phases).
+                if (willDownloadRetrieval) {
+                    state.update { appState ->
+                        appState.copy(
+                            chat = appState.chat.copy(
+                                isDownloading = false,
+                                downloadPercent = null,
+                                downloadStatus = null,
+                                isModelDownloaded = true
+                            )
+                        )
                     }
                 }
             } catch (err: Throwable) {
@@ -268,6 +292,60 @@ internal class ModelSettingsActions(
             } finally {
                 modelDownloadJob = null
                 refreshModelDownloadInfo()
+            }
+        }
+    }
+
+    /**
+     * Download the Wikipedia retrieval assets as a continuation of the model
+     * download (same progress UI). Best-effort: a failure here must not fail the
+     * model download — the chat model is already usable without retrieval.
+     */
+    private suspend fun downloadRetrievalAssetsIfNeeded() {
+        if (!state.value.developerSettings.wikipediaRetrievalEnabled) return
+        val provider = retrievalProvider ?: return
+        if (provider.isReady) return
+        try {
+            provider.downloadAssets { percent ->
+                state.update { appState ->
+                    appState.copy(
+                        chat = appState.chat.copy(
+                            isDownloading = true,
+                            downloadPercent = percent,
+                            downloadStatus = "Downloading Wikipedia data... $percent%"
+                        ),
+                        retrievalAssets = appState.retrievalAssets.copy(
+                            downloading = true, percent = percent, error = null
+                        )
+                    )
+                }
+            }
+            // Mark assets ready; the caller does the atomic chat reveal so there's
+            // no flicker between "model done" and "data done".
+            state.update { appState ->
+                appState.copy(
+                    retrievalAssets = appState.retrievalAssets.copy(ready = true, downloading = false, percent = 100)
+                )
+            }
+        } catch (err: Throwable) {
+            // Let cancellation propagate (the model-download job is being cancelled).
+            if (err is kotlinx.coroutines.CancellationException) throw err
+            logRepository.log(
+                LogLevel.Warning,
+                "Wikipedia data download failed",
+                details = err.message,
+                tag = "Retrieval",
+                throwable = err
+            )
+            // Surface the failure in the Settings retrieval row (chat still reveals;
+            // the model is usable without retrieval).
+            state.update { appState ->
+                appState.copy(
+                    retrievalAssets = appState.retrievalAssets.copy(
+                        downloading = false,
+                        error = err.message ?: "Download failed"
+                    )
+                )
             }
         }
     }

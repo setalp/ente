@@ -158,6 +158,17 @@ internal fun HomeNavigation(
                         isLoggedIn = appState.auth.isLoggedIn,
                         userEmail = appState.auth.email,
                         isAdvancedUnlocked = appState.developerSettings.isAdvancedUnlocked,
+                        wikipediaRetrievalEnabled = appState.developerSettings.wikipediaRetrievalEnabled,
+                        onToggleWikipediaRetrieval = { enabled ->
+                            // Update in-memory state immediately so the next message
+                            // sees the new value (DataStore persist is async).
+                            store.updateDeveloperSettings(
+                                appState.developerSettings.copy(wikipediaRetrievalEnabled = enabled)
+                            )
+                            advancedSettingsDataStore.persistWikipediaRetrievalEnabled(enabled)
+                        },
+                        retrievalAssets = appState.retrievalAssets,
+                        onDownloadRetrievalAssets = { store.downloadRetrievalAssets() },
                         onOpenLogs = { navController.navigate(HomeRoute.Logs) },
                         onOpenModelSettings = { navController.navigate(HomeRoute.ModelSettings) },
                         onOpenSystemPromptSettings = { navController.navigate(HomeRoute.SystemPromptSettings) },

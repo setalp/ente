@@ -1,0 +1,143 @@
+[App][INFO] [2026-06-24 11:58:41.645] App launched app=0.1.18-debug+33 device=Google Pixel 10 os=17 (sdk=37)
+[App][INFO] [2026-06-24 11:58:41.908] Chat device capability evaluated
+capability=Supported(totalMemoryBytes=12125016064)
+[Chat][INFO] [2026-06-24 11:59:32.432] Session created
+[Chat][INFO] [2026-06-24 11:59:32.455] Message sent
+len=33 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 11:59:34.026] Wikipedia retrieval injected 3 passage(s)
+Kazakhstan (0.62713057), Astana (0.62634146), Almaty (0.5878889)
+[QA][INFO] [2026-06-24 11:59:58.841] QA
+rag=true tok/s=8.1 | Q: What is the capital of Kazakhstan | A: The capital of Kazakhstan is **Astana**. | **Key Points:** | - **Name History:** Previously known as Akmolinsk, Tselinograd, and Nur-Sultan. | - **Location:** Aqmola Province, situated in the northern part of the country. | - **Population:** Estimated at 1,184,469 (as of 2026). | - **Significance:** Served as the capital from 1998 until 2019, when Nursultan Nazarbayev transitioned to the role. | - **Geopolitical Context:** Located near China, historically part of the Silk Road trade routes. | Astana, also spelled **Nur-Sultan** (after former president Nursultan Nazarbayev), is the seat of government and the country's political, economic, and cultural hub.
+[Chat][INFO] [2026-06-24 12:00:17.296] Session created
+[Chat][INFO] [2026-06-24 12:00:17.310] Message sent
+len=30 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:00:18.381] Wikipedia retrieval injected 3 passage(s)
+Naypyidaw (0.6387041), Yangon (0.5564545), Pyinmana (0.5249275)
+[QA][INFO] [2026-06-24 12:00:40.589] QA
+rag=true tok/s=6.6 | Q: What is the capital of Myanmar | A: The **capital of Myanmar** is **Naypyidaw**. It was officially moved inland from the coastal city of Yangon (Rangoon) in 2005 to serve as the nation’s administrative center. Naypyidaw is located in the **Bago Yoma** mountain range, near the **Shan Yoma** range, and covers an area of 7,054.37 square kilometers. While Yangon (Rangoon) remains the largest and most populous city in Myanmar, Naypyidaw was designated as the capital to decentralize power and promote development across the country.
+[Chat][INFO] [2026-06-24 12:01:10.245] Session created
+[Chat][INFO] [2026-06-24 12:01:10.258] Message sent
+len=30 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:01:11.715] Wikipedia retrieval injected 3 passage(s)
+Ankara (0.5515485), Istanbul (0.5031052), Turkish State Cemetery (0.47894213)
+[QA][INFO] [2026-06-24 12:01:31.641] QA
+rag=true tok/s=3.5 | Q: What is the capital of Turkey? | A: The capital of Turkey is **Ankara**. It is located in the center of Anatolia and serves as the country's political, cultural, and administrative hub. While Istanbul is the largest city and a major global metropolis, Ankara is the official capital since 1923.
+[Chat][INFO] [2026-06-24 12:01:42.862] Session created
+[Chat][INFO] [2026-06-24 12:01:42.920] Message sent
+len=33 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:01:44.498] Wikipedia retrieval injected 3 passage(s)
+Canberra (0.59550893), Australia (0.58160996), Australian Capital Territory (0.57886887)
+[QA][INFO] [2026-06-24 12:01:58.427] QA
+rag=true tok/s=2.7 | Q: What is the capital of Australia? | A: The **capital city of Australia** is **Canberra**. It serves as the seat of government and is located in the Australian Capital Territory (ACT).
+[Chat][INFO] [2026-06-24 12:02:13.602] Session created
+[Chat][INFO] [2026-06-24 12:02:13.652] Message sent
+len=19 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:02:15.113] Wikipedia retrieval injected 3 passage(s)
+Mansa Musa (0.6580292), Salama Moussa (0.45885938), Mansa Sakura (0.45074552)
+[QA][INFO] [2026-06-24 12:02:50.888] QA
+rag=true tok/s=7.0 | Q: Who was Mansa Musa? | A: **Mansa Musa** (1280 – 1337) was the ninth emperor (**mansa**) of the **Mali Empire** during the 14th century. He became emperor in **1312** and is celebrated as the richest person in history, with his wealth estimated to be around **US$900 billion** today. | **Key details**: | - **Rise to power**: Born in **Zagazig**, he studied in Europe (1908) and became a general in **Sundiata Keita’s** army. After Sundiata’s death, he led a struggle for succession, seizing power around **1285** and uniting the Mali Empire. | **Legacy**: | - **Cultural impact**: His wealth and influence made him a global figure in Europe and the Middle East. | - **Historical significance**: Recognized as the first African ruler to achieve widespread fame in these regions. | **Source**: | - Wikipedia articles on **Mansa Musa** and **Salama Moussa**.
+[Chat][INFO] [2026-06-24 12:03:01.115] Session created
+[Chat][INFO] [2026-06-24 12:03:01.141] Message sent
+len=16 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:03:02.679] Wikipedia retrieval injected 3 passage(s)
+Hypatia (0.68161833), Timeline of women in mathematics (0.49208954), Hippocrates (0.45769593)
+[QA][INFO] [2026-06-24 12:03:32.441] QA
+rag=true tok/s=6.6 | Q: Who was Hypatia? | A: Hypatia (hy-PAY-shee-uh) of Alexandria was a renowned mathematician, astronomer, and philosopher. She lived around 370 - 415 C.E. Hypatia was the first well-documented woman in mathematics, philosophy, and astronomy. She led a philosophical movement called Neoplatonism. Neoplatonism was developed from the ideas of the ancient Greek philosopher Plato. | Hypatia's contributions to mathematics and astronomy were significant, and she was head of the Neoplatonic School in Alexandria, Egypt, from the year 400. Her students were young men from around the empire. | Hypatia's work had a lasting impact on the fields of mathematics and astronomy. She was a pioneer in these fields and inspired many others with her knowledge and dedication.
+[Chat][INFO] [2026-06-24 12:03:54.216] Session created
+[Chat][INFO] [2026-06-24 12:03:54.256] Message sent
+len=21 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:03:55.875] Wikipedia retrieval injected 1 passage(s)
+Emmy Noether (0.6984729)
+[QA][INFO] [2026-06-24 12:04:10.269] QA
+rag=true tok/s=7.2 | Q: Who was Emmy Noether? | A: **Amalie Emmy Noether** (23 March 1882 – 14 April 1935) was a mathematician from Germany who studied **abstract algebra**. She studied mathematics at the University of Erlangen, and then joined the faculty at the University of Göttingen. Noether made significant contributions to **algebraic geometry** and **number theory**, and her work laid the foundation for modern theoretical physics.
+[Chat][INFO] [2026-06-24 12:04:54.780] Session created
+[Chat][INFO] [2026-06-24 12:04:54.813] Message sent
+len=26 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:04:56.294] Wikipedia retrieval injected 2 passage(s)
+Srinivasa Ramanujan (0.64166075), Ramanujan prime (0.4679234)
+[QA][INFO] [2026-06-24 12:05:24.289] QA
+rag=true tok/s=8.4 | Q: Who was Srinivas Ramanujan | A: **Srinivasa Ramanujan** was an Indian mathematician who made significant contributions to number theory, infinite series, and continued fractions. Born on December 22, 1887, in Madras (now Chennai), he had no formal training in mathematics but demonstrated extraordinary talent. | Ramanujan published a groundbreaking proof of **Bertrand's postulate** in 1919, which had already been proven by Pafnuty Chebyshev. His work on this result showcased his exceptional mathematical insight. | **Ramanujan primes** are a set of prime numbers that play a crucial role in the study of prime numbers. These primes are significant because they help in understanding the distribution and behavior of primes. | Ramanujan's mathematical contributions have had a profound impact on various fields of mathematics, and he remains a celebrated figure in the history of mathematics.
+[Chat][INFO] [2026-06-24 12:05:43.046] Session created
+[Chat][INFO] [2026-06-24 12:05:43.073] Message sent
+len=21 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:05:44.646] Wikipedia retrieval injected 2 passage(s)
+Grace Hopper (0.6754369), Edward Hopper (0.46067783)
+[QA][INFO] [2026-06-24 12:06:05.766] QA
+rag=true tok/s=6.7 | Q: Who was Grace Hopper? | A: **Grace Murray Hopper** was an American computer scientist and United States Navy officer. She graduated from Vassar College in 1928 and Yale University in 1934 with a Ph.D. degree in mathematics. Hopper joined the U.S. Navy during World War II in 1943 and worked on computers for 43 years. After retiring in 1986, she passed away on January 1, 1992. She is known for her contributions to computer science, particularly in the development of compilers and the development of the first computer programming language.
+[Chat][INFO] [2026-06-24 12:06:41.143] Session created
+[Chat][INFO] [2026-06-24 12:06:41.164] Message sent
+len=34 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:06:42.691] Wikipedia retrieval injected 2 passage(s)
+Antikythera mechanism (0.69291216), Orrery (0.45330018)
+[QA][INFO] [2026-06-24 12:07:04.103] QA
+rag=true tok/s=7.6 | Q: What is the Antikythera mechanism? | A: The **Antikythera mechanism** is an ancient Greek **mechanical calculator** and **orrery** discovered in a shipwreck off the coast of **Antikythera, Greece** in 1902. It is recognized as one of the earliest known **analog computers** and **planetaria** (mechanical models of the Solar System). The device was used to track celestial events, such as the positions of the Sun, Moon, and planets, and to predict astronomical phenomena like eclipses. Its intricate gear system and precision suggest advanced engineering for its time, making it a significant artifact in the study of ancient technology and astronomy.
+[Chat][INFO] [2026-06-24 12:07:42.616] Session created
+[Chat][INFO] [2026-06-24 12:07:42.642] Message sent
+len=35 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:07:44.001] Wikipedia retrieval injected 1 passage(s)
+Treaty of Tordesillas (0.668949)
+[QA][INFO] [2026-06-24 12:08:21.500] QA
+rag=true tok/s=9.8 | Q: What was the treaty of tordesillas? | A: The **Treaty of Tordesillas** was a **1494 agreement** between **Portugal** and **Spain** that divided the newly discovered lands outside Europe between the two nations. The treaty was brokered by the **Pope Alexander VI** and established a line of demarcation on a map. This line was **2,193 kilometers (1,350 miles)** west of the **Cape Verde Islands**. | - **Portugal** was granted the lands **to the east** of the line, including **Brazil**. | - **Spain** was awarded the lands **to the west**, encompassing **modern-day Spain, Mexico, and parts of Central and South America**. | The treaty aimed to resolve disputes over newly discovered territories and prevent conflicts between the two emerging European powers. However, it excluded other European nations, leading to later colonial expansion and tensions. | **Key details**: | - **Date**: 1494 | - **Parties**: Portugal and Spain | - **Purpose**: Divide uncharted lands between Portugal and Spain. | - **Line of division**: 2,193 km (1,350 mi) west of Cape Verde. | - **Pope’s role**: Mediated the agreement under his authority. | **Note**: The treaty’s legacy includes the **Columbian Exchange** and the establishment of colonial empires, though it was later superseded by the **Treaty of Westphalia (1648)**.
+[Chat][INFO] [2026-06-24 12:08:43.553] Session created
+[Chat][INFO] [2026-06-24 12:08:43.592] Message sent
+len=33 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:08:45.120] Wikipedia retrieval injected 3 passage(s)
+Defenestration of Prague (0.6273309), Second defenestration of Prague (0.6004614), First defenestration of Prague (0.5965312)
+[QA][INFO] [2026-06-24 12:09:14.552] QA
+rag=true tok/s=6.2 | Q: Was the defenestration of prague? | A: The defenestration of Prague refers to **three distinct events**: | 1. **First Defenestration (1419)**: Jan Hus was burned at the stake at the Council of Constance, marking the start of the Hussite Wars. | 2. **Second Defenestration (1618)**: During the Bohemian Revolt, three Bohemian nobles (Jaroslav Bořita, Vilém Slavata, and Filip Fabricius) were thrown from a Prague Castle window, igniting the Thirty Years' War. | 3. **Third Defenestration (1948)**: The murder of Jan Masaryk, a key figure in Czech independence, was sometimes called the "Third Defenestration" of Prague. | The term is not a single event but three separate occurrences.
+[Chat][INFO] [2026-06-24 12:09:42.312] Session created
+[Chat][INFO] [2026-06-24 12:09:42.370] Message sent
+len=26 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:09:43.854] Wikipedia retrieval injected 2 passage(s)
+Rosetta Stone (0.6676321), Egyptian language (0.4850499)
+[QA][INFO] [2026-06-24 12:10:04.244] QA
+rag=true tok/s=6.4 | Q: What is the Rosetta stone? | A: The **Rosetta Stone** is a stone with writing carved into it. There are 3 types of writing on the Rosetta stone; Greek, Egyptian, and another form of Egyptian writing. French soldiers found it in Egypt in 1799. It helped people get a better understanding of the Ancient Egyptian writing system called hieroglyphics. Its discovery led to the translation of Ancient Egyptian writing. The stone is named after the city where it was found, Rosetta (also called Rashid). The stone is now in the British Museum in London.
+[Chat][INFO] [2026-06-24 12:10:25.004] Session created
+[Chat][INFO] [2026-06-24 12:10:25.024] Message sent
+len=30 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:10:26.484] Wikipedia retrieval injected 1 passage(s)
+Voynich manuscript (0.6673055)
+[QA][INFO] [2026-06-24 12:10:45.211] QA
+rag=true tok/s=5.3 | Q: What is the Voynich manuscript | A: The **Voynich manuscript** is a **medieval** **manuscript** named after **Wilfrid Voynich**, a Polish antiquarian and cryptographer who purchased it in the early 20th century. It is made up of about **240 vellum pages** and was probably written in the **early 15th century** in **northern Italy**. Today, it is housed in the **library of Yale University**.
+[Chat][INFO] [2026-06-24 12:11:04.738] Session created
+[Chat][INFO] [2026-06-24 12:11:04.763] Message sent
+len=21 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:11:06.244] Wikipedia retrieval injected 2 passage(s)
+Tardigrade (0.6691604), Tadpole (0.4672516)
+[QA][INFO] [2026-06-24 12:11:33.613] QA
+rag=true tok/s=7.1 | Q: What is a tardigrade? | A: A **tardigrade** is a microscopic, segmented animal that belongs to the phylum Tardigrada. They are known for their remarkable resilience, capable of surviving extreme environmental conditions such as vacuum, intense heat, cold, and radiation. Tardigrades are also called **water bears** or **moss piglets**. | ### Key Facts: | - **Habitat**: They live in water, making them aquatic invertebrates. | - **Classification**: They are part of the superphylum Ecdysozoa. | - **Species**: Over 1000 species exist, each adapted to specific environments. | Tardigrades were first described in 1773, and their name derives from the Greek *tardēr* (slow stepper), reflecting their slow movement.
+[Chat][INFO] [2026-06-24 12:11:48.222] Session created
+[Chat][INFO] [2026-06-24 12:11:48.260] Message sent
+len=34 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:11:49.919] Wikipedia retrieval injected 1 passage(s)
+Dunning–Kruger effect (0.69341725)
+[QA][INFO] [2026-06-24 12:12:07.455] QA
+rag=true tok/s=7.5 | Q: What is the dunning kruger effect? | A: The **Dunning-Kruger effect** is a cognitive bias where individuals with low ability at a task overestimate their competence, while those with high ability tend to underestimate it. This occurs because: | - **Novices** lack the knowledge and skills to recognize their own incompetence (**lack of metacognition**). | - **Experts** are so skilled that they fail to notice their own errors (**ignorance of one's own superiority**). | It highlights a gap between **perceived** and **actual** competence.
+[Chat][INFO] [2026-06-24 12:12:34.850] Session created
+[Chat][INFO] [2026-06-24 12:12:34.889] Message sent
+len=35 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:12:36.398] Wikipedia retrieval injected 1 passage(s)
+Sapir-Whorf hypothesis (0.6507729)
+[QA][INFO] [2026-06-24 12:13:42.712] QA
+rag=true tok/s=9.9 | Q: What is the Sapir Whorf hypothesis! | A: The **Sapir-Whorf hypothesis** (also known as the **linguistic relativity hypothesis**) is a theory in linguistics and cognitive science that posits a relationship between the **structure of a language** and the **cognitive processes** of its speakers. It suggests that the **language one speaks** influences how they **perceive**, **think**, and **interact with the world**. | ### Key Concepts: | 1. **Linguistic Relativity**: The idea that the **structure of language** (e.g., grammar, vocabulary, syntax) shapes or influences **cognitive frameworks** (e.g., perception, categorization, memory). | 2. **Strong vs. Weak Version**: | - **Strong version** (linguistic determinism): Language **determines** thought (e.g., a language lacks a word for "future," so speakers cannot think about it). | - **Weak version** (linguistic relativity): Language **influences** thought (e.g., speakers of languages with distinct color terms perceive colors differently). | ### Examples: | - **Color Perception**: Some languages have words for colors that others do not (e.g., the Inuit language *qalukjuak* for "snow" and *sila* for "wind"). | - **Time Perception**: Languages that use **absolute time** (e.g., English) vs. **relative time** (e.g., Mandarin) may lead speakers to think about time differently. | - **Gendered Nouns**: Languages with grammatical gender (e.g., French *chat* for "cat," *chien* for "dog") may influence how speakers perceive the world. | ### Historical Context: | - Proposed by **Edward Sapir** (1902–1949) and **Benjamin Lee Whorf** (1889–1949), the hypothesis was a response to debates about the **biological basis of language**. | - Whorf’s work, particularly his 1942 book *The Language Instinct*, became a cornerstone of the theory. | ### Criticisms: | - Some argue that the **strong version** is overly deterministic, while the **weak version** is criticized for being too vague. | - Modern research often emphasizes **interaction** between language, culture, and cognition rather than strict determinism. | ### Significance: | The Sapir-Whorf hypothesis highlights the **power of language** in shaping human thought and behavior, making it a foundational concept in fields like **linguistics, anthropology, and cognitive science**. | Let me know if you'd like to explore specific examples or the debate around the hypothesis!
+[Chat][INFO] [2026-06-24 12:13:54.788] Session created
+[Chat][INFO] [2026-06-24 12:13:54.799] Message sent
+len=28 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:13:57.117] Wikipedia retrieval injected 3 passage(s)
+Atacama Desert (0.70047224), Atacama Region (0.6085709), Llullaillaco (0.5225611)
+[QA][INFO] [2026-06-24 12:14:24.814] QA
+rag=true tok/s=4.9 | Q: Where is the Atacama desert? | A: The **Atacama Desert** is located in **northern Chile**, specifically along the **Tropic of Capricorn**. It spans a vast area, covering parts of northern Chile, northern Argentina, and a small portion of southern Peru. This region is renowned for its extreme aridity, with some areas receiving less than an inch (25mm) of rain annually. The Atacama is one of the driest places on Earth, and its unique climate and geography make it a critical area for scientific research, especially in fields like astronomy and astrobiology.
+[Chat][INFO] [2026-06-24 12:14:56.585] Session created
+[Chat][INFO] [2026-06-24 12:14:56.594] Message sent
+len=30 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:14:58.088] Wikipedia retrieval injected 3 passage(s)
+Strait of Malacca (0.69592154), Malacca (0.59457153), Strait of Singapore (0.56257635)
+[QA][INFO] [2026-06-24 12:15:39.744] QA
+rag=true tok/s=8.6 | Q: What is the Strait of Malacca? | A: The **Strait of Malacca** is a narrow maritime passage that connects the **Andaman Sea** and the **Java Sea**, located in Southeast Asia. It serves as a critical maritime chokepoint, linking the Indian Ocean to the Pacific Ocean. The strait is approximately **800 kilometers (500 miles)** long and varies in width, with its narrowest point reaching about **80 kilometers (50 miles)**. At its shallowest depth, the strait reaches depths of around **80 meters (260 feet)**. | **Key geographical context** includes its role in connecting the Malay Peninsula (Malaya) to the Indonesian island of Sumatra. Its strategic importance is underscored by its historical significance as a vital trade route, particularly for the spice trade, and its continued relevance in modern global shipping. The strait is also part of the broader **Southeast Asian geography**, intersecting with the **Geography of Malaysia**, **Geography of Indonesia**, and **Geography of Singapore**. | **Historical and modern significance**: | - The strait has been a focal point for trade, exploration, and conflict, including colonial rivalries and World War II battles. | - Today, it remains a critical shipping lane, with major global trade routes passing through it. | This strait is a vital link in the region's maritime history and continues to shape economic and geopolitical dynamics in Southeast Asia.
+[Chat][INFO] [2026-06-24 12:16:00.753] Session created
+[Chat][INFO] [2026-06-24 12:16:00.771] Message sent
+len=47 attachments=0 edited=false
+[Retrieval][INFO] [2026-06-24 12:16:02.352] Wikipedia retrieval injected 3 passage(s)
+Jupiter (0.62612087), Giant planet (0.5735814), Planet (0.54627955)
+[QA][INFO] [2026-06-24 12:16:17.342] QA
+rag=true tok/s=2.6 | Q: What is the largest planet in the solar system? | A: **Jupiter** is the largest planet in the Solar System. It is a gas giant, significantly larger than Earth, with a mass about 318 times that of our planet.

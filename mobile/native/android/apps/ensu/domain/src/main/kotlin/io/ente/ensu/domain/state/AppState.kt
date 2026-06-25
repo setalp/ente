@@ -8,5 +8,6 @@ data class AppState(
     val chat: ChatState = ChatState(),
     val developerSettings: DeveloperSettingsState = DeveloperSettingsState(),
     val modelSettings: ModelSettingsState = ModelSettingsState(),
+    val retrievalAssets: RetrievalAssetsState = RetrievalAssetsState(),
     val sync: SyncState = SyncState.Idle
 )
