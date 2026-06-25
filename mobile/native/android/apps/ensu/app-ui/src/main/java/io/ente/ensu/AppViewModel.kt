@@ -75,7 +75,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         retrievalProvider = retrievalProvider,
         deviceCapabilityProvider = deviceCapabilityProvider,
         ensuDefaults = ensuDefaults,
-        logRepository = logRepository
+        logRepository = logRepository,
+        // Debug-only: enables full Q&A logging for RAG analysis (never in release).
+        verboseQaLogging = BuildConfig.DEBUG
     )
     val authService = EnsuAuthService(
         context = application,

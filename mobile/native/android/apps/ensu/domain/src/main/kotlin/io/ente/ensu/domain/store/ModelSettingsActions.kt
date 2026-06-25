@@ -313,6 +313,9 @@ internal class ModelSettingsActions(
                             isDownloading = true,
                             downloadPercent = percent,
                             downloadStatus = "Downloading Wikipedia data... $percent%"
+                        ),
+                        retrievalAssets = appState.retrievalAssets.copy(
+                            downloading = true, percent = percent, error = null
                         )
                     )
                 }
@@ -325,6 +328,8 @@ internal class ModelSettingsActions(
                 )
             }
         } catch (err: Throwable) {
+            // Let cancellation propagate (the model-download job is being cancelled).
+            if (err is kotlinx.coroutines.CancellationException) throw err
             logRepository.log(
                 LogLevel.Warning,
                 "Wikipedia data download failed",
@@ -332,6 +337,16 @@ internal class ModelSettingsActions(
                 tag = "Retrieval",
                 throwable = err
             )
+            // Surface the failure in the Settings retrieval row (chat still reveals;
+            // the model is usable without retrieval).
+            state.update { appState ->
+                appState.copy(
+                    retrievalAssets = appState.retrievalAssets.copy(
+                        downloading = false,
+                        error = err.message ?: "Download failed"
+                    )
+                )
+            }
         }
     }
 

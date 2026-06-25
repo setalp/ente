@@ -60,7 +60,11 @@ fun hostAbi(): String = when (System.getProperty("os.arch")) {
     else -> error("Unsupported host architecture: ${System.getProperty("os.arch")}")
 }
 
-val debugAbis = listOf(connectedDeviceAbi() ?: hostAbi())
+// Debug builds default to a single ABI (the connected device, or the host) for
+// fast iteration. Pass -Pensu.allAbis to build a shareable multi-ABI debug APK
+// (e.g. for distributing to testers on varied devices).
+val debugAbis = if (project.hasProperty("ensu.allAbis")) knownAbis
+    else listOf(connectedDeviceAbi() ?: hostAbi())
 
 android {
     namespace = "io.ente.ensu"

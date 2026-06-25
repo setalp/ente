@@ -160,6 +160,11 @@ internal fun HomeNavigation(
                         isAdvancedUnlocked = appState.developerSettings.isAdvancedUnlocked,
                         wikipediaRetrievalEnabled = appState.developerSettings.wikipediaRetrievalEnabled,
                         onToggleWikipediaRetrieval = { enabled ->
+                            // Update in-memory state immediately so the next message
+                            // sees the new value (DataStore persist is async).
+                            store.updateDeveloperSettings(
+                                appState.developerSettings.copy(wikipediaRetrievalEnabled = enabled)
+                            )
                             advancedSettingsDataStore.persistWikipediaRetrievalEnabled(enabled)
                         },
                         retrievalAssets = appState.retrievalAssets,

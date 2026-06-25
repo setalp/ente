@@ -34,7 +34,8 @@ class AppStore(
     private val deviceCapabilityProvider: DeviceCapabilityProvider = UnknownDeviceCapabilityProvider,
     val ensuDefaults: EnsuDefaults,
     private val clock: () -> Long = { System.currentTimeMillis() },
-    private val logRepository: LogRepository = NoOpLogRepository
+    private val logRepository: LogRepository = NoOpLogRepository,
+    private val verboseQaLogging: Boolean = false
 ) {
     private val _state = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -56,7 +57,8 @@ class AppStore(
         syncActions = syncActions,
         modelSettingsActions = modelSettingsActions,
         ensuDefaults = ensuDefaults,
-        retrievalProvider = retrievalProvider
+        retrievalProvider = retrievalProvider,
+        verboseQaLogging = verboseQaLogging
     )
     private val authActions = AuthStoreActions(_state, logRepository) {
         syncActions.syncAfterLogin()

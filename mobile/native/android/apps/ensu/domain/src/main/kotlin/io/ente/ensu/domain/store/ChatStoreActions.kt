@@ -49,7 +49,10 @@ internal class ChatStoreActions(
     private val ensuDefaults: EnsuDefaults,
     // Null until wired in AppViewModel; when present and ready, retrieved
     // Wikipedia context is injected before the user turn (see retrieveWikipediaContext).
-    private val retrievalProvider: RetrievalProvider? = null
+    private val retrievalProvider: RetrievalProvider? = null,
+    // Logs full question+answer text to the local log file for RAG analysis.
+    // Debug-only (set from BuildConfig.DEBUG) — never log chat content in release.
+    private val verboseQaLogging: Boolean = false
 ) {
     private val branchSelections = mutableMapOf<String, MutableMap<String, String>>()
     private val sessionSummaries = mutableMapOf<String, String>()
@@ -546,12 +549,17 @@ internal class ChatStoreActions(
             }
 
             val generationLimits = resolveGenerationLimits(target)
+            // Retrieve before history selection so the injected context is counted
+            // against the input budget (otherwise it can overflow the context window).
+            val retrievedContext = retrieveWikipediaContext(userMessage.text)
+            val retrievedContextTokens = retrievedContext?.let { estimateTokens(it) } ?: 0
             val historySelection = buildHistorySelection(
                 sessionId = sessionId,
                 promptText = prompt.text,
                 promptImageCount = prompt.imageFiles.size,
                 currentMessageId = userMessage.id,
-                limits = generationLimits
+                limits = generationLimits,
+                extraContextTokens = retrievedContextTokens
             )
 
             if (historySelection.wasTrimmed && overflowBypassMessageId != userMessage.id) {
@@ -585,9 +593,8 @@ internal class ChatStoreActions(
                 text = systemPrompt,
                 role = LlmMessageRole.System
             )
-            // On-device Wikipedia retrieval (best-effort): inject as a system
-            // message after the main system prompt, before history + user turn.
-            val retrievedContext = retrieveWikipediaContext(userMessage.text)
+            // Inject the retrieved context (computed above, already counted in the
+            // budget) as a system message after the system prompt, before history.
             val llmMessages = buildList {
                 add(systemMessage)
                 if (retrievedContext != null) {
@@ -672,20 +679,22 @@ internal class ChatStoreActions(
             } else null
 
             // Full Q&A record for analysing whether Wikipedia retrieval improves
-            // answers (debug analysis — logs chat content to the local log file).
-            // Pair with the adjacent [Retrieval] line for the injected passages.
-            logRepository.log(
-                LogLevel.Info,
-                "QA",
-                details = buildString {
-                    append("rag=").append(state.value.developerSettings.wikipediaRetrievalEnabled)
-                    if (interrupted) append(" interrupted=true")
-                    tokensPerSecond?.let { append(" tok/s=").append(String.format("%.1f", it)) }
-                    append("\nQ: ").append(parentMessage.text)
-                    append("\nA: ").append(finalText)
-                },
-                tag = "QA"
-            )
+            // answers. DEBUG-ONLY: logs chat content to the local log file, which
+            // is user-exportable — never enable in a release build.
+            if (verboseQaLogging) {
+                logRepository.log(
+                    LogLevel.Info,
+                    "QA",
+                    details = buildString {
+                        append("rag=").append(state.value.developerSettings.wikipediaRetrievalEnabled)
+                        if (interrupted) append(" interrupted=true")
+                        tokensPerSecond?.let { append(" tok/s=").append(String.format("%.1f", it)) }
+                        append("\nQ: ").append(parentMessage.text)
+                        append("\nA: ").append(finalText)
+                    },
+                    tag = "QA"
+                )
+            }
 
             if (shouldUpdateUi) {
                 val inserted = runCatching {
@@ -1189,7 +1198,8 @@ internal class ChatStoreActions(
         promptText: String,
         promptImageCount: Int,
         currentMessageId: String,
-        limits: GenerationLimits
+        limits: GenerationLimits,
+        extraContextTokens: Int = 0
     ): HistorySelection {
         val path = buildSelectedPath(sessionId)
         val historyMessages = path.takeWhile { it.id != currentMessageId }
@@ -1198,8 +1208,9 @@ internal class ChatStoreActions(
         val systemTokens = estimateTokens(systemPrompt)
         val promptTokens = estimatePromptTokens(promptText, promptImageCount)
         val historyTokens = historyMessages.sumOf { estimateTokens(historyText(it)) }
-        val inputTokens = systemTokens + promptTokens + historyTokens
-        var remaining = inputBudget - systemTokens - promptTokens
+        // extraContextTokens = injected Wikipedia context; counts against the budget.
+        val inputTokens = systemTokens + promptTokens + historyTokens + extraContextTokens
+        var remaining = inputBudget - systemTokens - promptTokens - extraContextTokens
 
         if (remaining <= 0 || historyMessages.isEmpty()) {
             return HistorySelection(emptyList(), inputTokens, inputBudget, inputTokens > inputBudget)
