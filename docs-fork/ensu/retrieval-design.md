@@ -148,9 +148,15 @@ old paths in the sections below are kept for history but superseded by:
   (`RetrievalIndex`, `RetrievalPassage`, `RetrievalSearchHit`, `RetrievalError`), registered
   in `src/lib.rs`. **No codegen changes needed** — modules of the single `ensu` crate flow
   into the generated `io/ente/ensu/bindings/ensu.kt` automatically.
-- **Android (to re-port)** — single `app/` module; provider lands against
-  `app/.../llm/RustLlmProvider.kt` + `chat/RustChatRepository.kt` rather than the old
-  `:domain`/`:data` split. Injection point and toggle to be re-identified in that module.
+- **Android (re-ported ✅)** — single `app/` module. `app/.../llm/{RetrievalProvider,
+  RetrievalAssetsState,RustRetrievalProvider}.kt` (provider over the unified
+  `io.ente.ensu.bindings`: `llmEmbed` + `RetrievalIndex`); injection in
+  `chat/ChatStoreActions.kt` (`retrieveWikipediaContext()`); DI through `AppStore`/
+  `AppViewModel`/`AppState`; toggle + data-status in `settings/SettingsScreen.kt`
+  (`wikipediaRetrievalEnabled` flag) wired from `HomeNavigation.kt`; `BuildConfig`
+  enabled in `app/build.gradle.kts`. Verified: `./gradlew :app:compileDebugKotlin
+  -x buildRustJniDebug` BUILD SUCCESSFUL. Default-off until assets are provisioned
+  (sideload to `<external>/Download/rag/` or in-app download).
 
 ## Android wiring plan (native path) — pre-sync, superseded above
 
