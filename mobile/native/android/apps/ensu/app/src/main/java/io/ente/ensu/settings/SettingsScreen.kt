@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -42,6 +43,7 @@ import io.ente.ensu.designsystem.EnsuCornerRadius
 import io.ente.ensu.designsystem.EnsuSpacing
 import io.ente.ensu.designsystem.EnsuTypography
 import io.ente.ensu.designsystem.HugeIcons
+import io.ente.ensu.llm.RetrievalAssetsState
 
 @Composable
 fun SettingsScreen(
@@ -51,7 +53,11 @@ fun SettingsScreen(
     onOpenModelSettings: () -> Unit,
     onOpenSystemPromptSettings: () -> Unit,
     onUnlockAdvanced: () -> Unit,
-    onSignIn: () -> Unit
+    onSignIn: () -> Unit,
+    wikipediaRetrievalEnabled: Boolean = true,
+    retrievalAssets: RetrievalAssetsState = RetrievalAssetsState(),
+    onToggleWikipediaRetrieval: (Boolean) -> Unit = {},
+    onDownloadRetrievalAssets: () -> Unit = {}
 ) {
     var query by remember { mutableStateOf("") }
     var buildVersionTapCount by remember { mutableStateOf(0) }
@@ -176,6 +182,18 @@ fun SettingsScreen(
                         )
                     )
                 }
+                item(key = "advanced-wikipedia-toggle") {
+                    WikipediaToggleRow(
+                        enabled = wikipediaRetrievalEnabled,
+                        onToggle = onToggleWikipediaRetrieval
+                    )
+                }
+                item(key = "advanced-wikipedia-data") {
+                    WikipediaDataRow(
+                        assets = retrievalAssets,
+                        onDownload = onDownloadRetrievalAssets
+                    )
+                }
             }
 
             if (query.isBlank()) {
@@ -243,6 +261,55 @@ private fun SettingsRow(item: SettingsItem) {
             tint = EnsuColor.textMuted(),
             modifier = Modifier.size(18.dp)
         )
+    }
+}
+
+@Composable
+private fun WikipediaToggleRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(EnsuCornerRadius.card.dp))
+            .background(EnsuColor.fillFaint())
+            .clickable { onToggle(!enabled) }
+            .padding(horizontal = EnsuSpacing.lg.dp, vertical = EnsuSpacing.lg.dp),
+        horizontalArrangement = Arrangement.spacedBy(EnsuSpacing.md.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = "Wikipedia context", style = EnsuTypography.body, color = EnsuColor.textPrimary())
+            Text(
+                text = "Ground factual answers in on-device Simple Wikipedia",
+                style = EnsuTypography.small,
+                color = EnsuColor.textMuted()
+            )
+        }
+        Switch(checked = enabled, onCheckedChange = onToggle)
+    }
+}
+
+@Composable
+private fun WikipediaDataRow(assets: RetrievalAssetsState, onDownload: () -> Unit) {
+    val status = when {
+        assets.ready -> "Ready"
+        assets.downloading -> "Downloading… ${assets.percent}%"
+        assets.error != null -> "Failed: ${assets.error}"
+        else -> "Tap to download (~480 MB)"
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(EnsuCornerRadius.card.dp))
+            .background(EnsuColor.fillFaint())
+            .clickable(enabled = !assets.ready && !assets.downloading, onClick = onDownload)
+            .padding(horizontal = EnsuSpacing.lg.dp, vertical = EnsuSpacing.lg.dp),
+        horizontalArrangement = Arrangement.spacedBy(EnsuSpacing.md.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = "Wikipedia data", style = EnsuTypography.body, color = EnsuColor.textPrimary())
+            Text(text = status, style = EnsuTypography.small, color = EnsuColor.textMuted())
+        }
     }
 }
 

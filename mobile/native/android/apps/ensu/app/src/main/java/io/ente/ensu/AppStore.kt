@@ -7,6 +7,8 @@ import io.ente.ensu.chat.RustChatRepository
 import io.ente.ensu.device.ChatDeviceCapability
 import io.ente.ensu.device.AndroidDeviceCapabilityProvider
 import io.ente.ensu.llm.RustLlmProvider
+import io.ente.ensu.llm.RetrievalProvider
+import io.ente.ensu.llm.RetrievalAssetsState
 import io.ente.ensu.logging.FileLogRepository
 import io.ente.ensu.chat.Attachment
 import io.ente.ensu.chat.ChatMessage
@@ -20,16 +22,19 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class AppStore(
     private val sessionPreferences: SessionPreferencesDataStore,
     private val chatRepository: RustChatRepository,
     private val llmProvider: RustLlmProvider,
+    private val retrievalProvider: RetrievalProvider? = null,
     private val deviceCapabilityProvider: AndroidDeviceCapabilityProvider,
     val configDefaults: ConfigDefaults,
     private val logRepository: FileLogRepository,
-    private val clock: () -> Long = { System.currentTimeMillis() }
+    private val clock: () -> Long = { System.currentTimeMillis() },
+    private val verboseQaLogging: Boolean = false
 ) {
     private val _state = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -48,15 +53,63 @@ class AppStore(
         messageStore = messageStore,
         attachmentActions = attachmentActions,
         modelSettingsActions = modelSettingsActions,
-        configDefaults = configDefaults
+        configDefaults = configDefaults,
+        retrievalProvider = retrievalProvider,
+        verboseQaLogging = verboseQaLogging
     )
+
+    private var appScope: CoroutineScope? = null
+
     fun bootstrap(scope: CoroutineScope) {
+        appScope = scope
         chatActions.setScope(scope)
         attachmentActions.setScope(scope)
         modelSettingsActions.setScope(scope)
         refreshDeviceCapability(scope)
         chatActions.bootstrap(scope)
         modelSettingsActions.refreshModelDownloadInfo()
+        refreshRetrievalReady()
+    }
+
+    /** Reflect whether the Wikipedia retrieval assets are present on-device. */
+    fun refreshRetrievalReady() {
+        val ready = retrievalProvider?.isReady ?: false
+        _state.update { it.copy(retrievalAssets = it.retrievalAssets.copy(ready = ready)) }
+    }
+
+    /** Download the Wikipedia retrieval assets (embedding model + index). */
+    fun downloadRetrievalAssets() {
+        val provider = retrievalProvider ?: return
+        val scope = appScope ?: return
+        if (_state.value.retrievalAssets.downloading) return
+        _state.update {
+            it.copy(retrievalAssets = it.retrievalAssets.copy(downloading = true, percent = 0, error = null))
+        }
+        scope.launch {
+            try {
+                provider.downloadAssets { percent ->
+                    _state.update { it.copy(retrievalAssets = it.retrievalAssets.copy(percent = percent)) }
+                }
+                _state.update {
+                    it.copy(retrievalAssets = RetrievalAssetsState(ready = true, downloading = false, percent = 100))
+                }
+            } catch (error: Throwable) {
+                logRepository.log(
+                    LogLevel.Error,
+                    "Wikipedia data download failed",
+                    details = error.message,
+                    tag = "Retrieval"
+                )
+                _state.update {
+                    it.copy(
+                        retrievalAssets = it.retrievalAssets.copy(
+                            downloading = false,
+                            error = error.message ?: "Download failed"
+                        )
+                    )
+                }
+            }
+        }
     }
 
     fun refreshDeviceCapability(scope: CoroutineScope? = null) {

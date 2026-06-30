@@ -154,7 +154,15 @@ internal fun HomeNavigation(
                             store.unlockAdvancedSettings()
                             advancedSettingsDataStore.persistUnlockAdvancedSettings()
                         },
-                        onSignIn = onSignIn
+                        onSignIn = onSignIn,
+                        wikipediaRetrievalEnabled = appState.developerSettings.wikipediaRetrievalEnabled,
+                        retrievalAssets = appState.retrievalAssets,
+                        // Persisting re-emits via settingsFlow -> applyPersistedSettings,
+                        // which updates in-memory developerSettings (mirrors systemPrompt).
+                        onToggleWikipediaRetrieval = { enabled ->
+                            advancedSettingsDataStore.persistWikipediaRetrievalEnabled(enabled)
+                        },
+                        onDownloadRetrievalAssets = { store.downloadRetrievalAssets() }
                     )
                 }
                 composable(

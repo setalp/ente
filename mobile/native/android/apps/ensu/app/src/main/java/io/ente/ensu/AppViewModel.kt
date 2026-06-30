@@ -13,6 +13,7 @@ import io.ente.ensu.settings.SessionPreferencesDataStore
 import io.ente.ensu.chat.RustChatRepository
 import io.ente.ensu.config.RustDefaults
 import io.ente.ensu.llm.RustLlmProvider
+import io.ente.ensu.llm.RustRetrievalProvider
 import io.ente.ensu.logging.FileLogRepository
 import io.ente.ensu.storage.CredentialStore
 import io.ente.ensu.logging.LogLevel
@@ -37,6 +38,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         legacyModelDir = File(application.filesDir, "llm"),
         deviceCapabilityProvider = deviceCapabilityProvider
     )
+    // On-device Wikipedia retrieval. No-ops until the embedding model + index are
+    // present under the rag/ dir (sideload via adb push, or in-app download). The
+    // similarity gate inside the provider decides when context is actually injected.
+    private val retrievalProvider = RustRetrievalProvider(
+        embeddingModelPath = File(resolveRetrievalDir(application), EMBEDDING_MODEL_FILE),
+        indexDir = File(resolveRetrievalDir(application), "index")
+    )
     private val chatRepository = RustChatRepository(application, credentialStore)
     val configDefaults = RustDefaults.load()
 
@@ -44,9 +52,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         sessionPreferences = sessionPreferences,
         chatRepository = chatRepository,
         llmProvider = llmProvider,
+        retrievalProvider = retrievalProvider,
         deviceCapabilityProvider = deviceCapabilityProvider,
         configDefaults = configDefaults,
-        logRepository = logRepository
+        logRepository = logRepository,
+        // Debug-only: enables full Q&A logging for RAG analysis (never in release).
+        verboseQaLogging = BuildConfig.DEBUG
     )
     init {
         val launchMessage = "App launched app=$appVersion device=${Build.MANUFACTURER} ${Build.MODEL} os=${Build.VERSION.RELEASE} (sdk=${Build.VERSION.SDK_INT})"
@@ -95,6 +106,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ?: application.getExternalFilesDir(null)
             ?: application.filesDir
         return File(root, "llm")
+    }
+
+    // Sideload target: adb push the embedding GGUF + index/ here. Resolves to
+    // <external-files>/Download/rag/ (Android/data/<pkg>/files/Download/rag).
+    private fun resolveRetrievalDir(application: Application): File {
+        val root = application.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            ?: application.getExternalFilesDir(null)
+            ?: application.filesDir
+        return File(root, "rag")
+    }
+
+    companion object {
+        private const val EMBEDDING_MODEL_FILE = "embeddinggemma-300M-Q8_0.gguf"
     }
 
 }

@@ -28,7 +28,8 @@ class AdvancedSettingsDataStore(private val context: Context) {
         AdvancedSettingsSnapshot(
             developerSettings = DeveloperSettingsState(
                 isAdvancedUnlocked = prefs[Keys.advancedUnlocked] ?: false,
-                systemPrompt = prefs[Keys.systemPrompt].orEmpty()
+                systemPrompt = prefs[Keys.systemPrompt].orEmpty(),
+                wikipediaRetrievalEnabled = prefs[Keys.wikipediaRetrievalEnabled] ?: true
             ),
             modelSettings = ModelSettingsState(
                 useCustomModel = prefs[Keys.useCustomModel] ?: false,
@@ -62,6 +63,14 @@ class AdvancedSettingsDataStore(private val context: Context) {
     fun persistSystemPrompt(value: String) {
         persistenceScope.launch {
             saveSystemPrompt(value)
+        }
+    }
+
+    fun persistWikipediaRetrievalEnabled(enabled: Boolean) {
+        persistenceScope.launch {
+            context.advancedSettingsPreferences.edit { prefs ->
+                prefs[Keys.wikipediaRetrievalEnabled] = enabled
+            }
         }
     }
 
@@ -103,6 +112,7 @@ class AdvancedSettingsDataStore(private val context: Context) {
         private object Keys {
             val advancedUnlocked = booleanPreferencesKey("advanced_unlocked")
             val systemPrompt = stringPreferencesKey("system_prompt")
+            val wikipediaRetrievalEnabled = booleanPreferencesKey("wikipedia_retrieval_enabled")
             val useCustomModel = booleanPreferencesKey("use_custom_model")
             val modelUrl = stringPreferencesKey("model_url")
             val mmprojUrl = stringPreferencesKey("mmproj_url")
