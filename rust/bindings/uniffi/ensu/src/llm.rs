@@ -27,6 +27,10 @@ pub struct LlmContextParams {
     pub context_size: Option<i32>,
     pub n_threads: Option<i32>,
     pub n_batch: Option<i32>,
+    // Defaulted so existing call sites (chat contexts on every platform) keep
+    // compiling without passing it; only the embedding context sets it true.
+    #[uniffi(default = None)]
+    pub embeddings: Option<bool>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -142,6 +146,7 @@ impl From<LlmContextParams> for core::ContextParams {
             context_size: value.context_size,
             n_threads: value.n_threads,
             n_batch: value.n_batch,
+            embeddings: value.embeddings,
         }
     }
 }
@@ -316,6 +321,14 @@ pub fn llm_generate_chat_stream(
     core::generate_chat_stream(context.handle.as_ref(), request.into(), &mut sink)
         .map(Into::into)
         .map_err(LlmError::from)
+}
+
+#[uniffi::export]
+pub fn llm_embed(
+    context: Arc<LlmContextHandle>,
+    texts: Vec<String>,
+) -> Result<Vec<Vec<f32>>, LlmError> {
+    core::embed(context.handle.as_ref(), texts).map_err(LlmError::from)
 }
 
 #[uniffi::export]
