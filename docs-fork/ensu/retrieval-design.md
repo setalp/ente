@@ -125,9 +125,34 @@ user's documents, and on-device is mandatory (private text can't go to a cloud e
 - Web: new `web/apps/ensu/src/services/retrieval/` (index load, embed, search, router),
   wired into `services/llm/inference.ts` + `services/chat/` prompt assembly; composer
   toggle in `components/chat/ChatComposer.tsx`; feature flag in `services/featureFlags.ts`.
-- Native (later): `rust/crates/ensu/retrieval` mirroring it on the Rust core.
+- Native: folded into the consolidated `ente-ensu` crate — see "Code layout after the
+  2026-06 upstream sync" below.
 
-## Android wiring plan (native path)
+## Code layout after the 2026-06 upstream sync
+
+Upstream restructured the whole Ensu Rust + Android stack (consolidated the per-crate
+`rust/crates/ensu/{db,inference,sync,transcription}` into a single `ente-ensu` crate,
+unified the per-crate uniffi bindings into one `ente-ensu-uniffi` crate emitting a single
+`ensu.kt`/`ensu.swift`, renamed `inference`→`llm`, removed `sync`, moved the Android `:rust`
+module to `apps/ensu/rust/`, and collapsed the four Android gradle modules into one `app/`).
+The RAG feature was **re-ported onto that new layout** (branch `sync/upstream-2026-06`);
+old paths in the sections below are kept for history but superseded by:
+
+- **Embed** — `rust/crates/ensu/src/llm/embed.rs` (`embed()`), plus `ContextParams.embeddings`
+  in `src/llm/context.rs`. Re-exported via `llm` module. Test: `crates/ensu/tests/embed.rs`.
+- **Retrieval index** — `rust/crates/ensu/src/retrieval.rs` (`RetrievalIndex::open/search`),
+  a module of `ente-ensu` (not a separate crate). `memmap2` added to the crate. Test:
+  `crates/ensu/tests/retrieve.rs`.
+- **uniffi** — folded into the unified binding: `llm_embed` in
+  `rust/bindings/uniffi/ensu/src/llm.rs`; new `rust/bindings/uniffi/ensu/src/retrieval.rs`
+  (`RetrievalIndex`, `RetrievalPassage`, `RetrievalSearchHit`, `RetrievalError`), registered
+  in `src/lib.rs`. **No codegen changes needed** — modules of the single `ensu` crate flow
+  into the generated `io/ente/ensu/bindings/ensu.kt` automatically.
+- **Android (to re-port)** — single `app/` module; provider lands against
+  `app/.../llm/RustLlmProvider.kt` + `chat/RustChatRepository.kt` rather than the old
+  `:domain`/`:data` split. Injection point and toggle to be re-identified in that module.
+
+## Android wiring plan (native path) — pre-sync, superseded above
 
 Codebase findings (verified by reading source):
 

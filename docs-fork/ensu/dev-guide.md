@@ -41,6 +41,12 @@ mental model of the runtime.
   - `web/packages/accounts*/components/LoginContents.tsx` — `isEnsu` login UI branch.
 
 ### Rust (`rust/`) — the shared core
+> **2026-06 upstream sync:** the per-crate layout below was consolidated upstream into a
+> single `ente-ensu` crate (`rust/crates/ensu/src/{db,llm,transcription,retrieval}/`,
+> `config.rs`) and a single `ente-ensu-uniffi` binding (`rust/bindings/uniffi/ensu/src/`,
+> one `setup_scaffolding!("ensu")` → one generated `ensu.kt`/`ensu.swift`). `inference`→`llm`,
+> `sync` removed. RAG re-ported there; see `retrieval-design.md` → "Code layout after the
+> 2026-06 upstream sync". Bullets below are pre-sync history.
 - `rust/crates/ensu/db/` — `ensu-db`: encrypted chat DB, attachments, image compression.
 - `rust/crates/ensu/sync/` — `ensu-sync`: chat synchronization.
 - `rust/crates/ensu/inference/` — `inference_rs` (a.k.a. ensu-inference): LLM engine + `ensu_defaults()`.
