@@ -66,6 +66,10 @@ impl RetrievalIndex {
         u32::try_from(self.inner.len()).unwrap_or(u32::MAX)
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
     /// Cosine top-k over the index, gated at `threshold`. `query` must be the
     /// L2-normalized embedding from `llm_embed`. Empty result => the gate
     /// rejected everything (caller injects no retrieved context).

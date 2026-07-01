@@ -55,11 +55,14 @@ pub fn embed(context: &ContextHandle, texts: Vec<String>) -> Result<Vec<Vec<f32>
             let norm = vector.iter().map(|value| value * value).sum::<f32>().sqrt();
             // Reject a zero/NaN-norm embedding rather than emit an un-normalized
             // (e.g. all-zero) vector that would silently match nothing in search.
-            if !(norm > 0.0) {
+            // Positive guard (not `!(norm > 0.0)`) keeps NaN in the reject path while
+            // satisfying clippy::neg_cmp_op_on_partial_ord.
+            if norm > 0.0 {
+                for value in &mut vector {
+                    *value /= norm;
+                }
+            } else {
                 return Err("Embedding has zero or invalid norm".to_string());
-            }
-            for value in &mut vector {
-                *value /= norm;
             }
             out.push(vector);
         }
