@@ -53,7 +53,10 @@ fn embed_is_normalized_768d_and_ranks_similarity() {
     for vector in &vectors {
         assert_eq!(vector.len(), 768, "EmbeddingGemma should yield 768 dims");
         let norm = vector.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!((norm - 1.0).abs() < 1e-3, "expected unit-normalized, got {norm}");
+        assert!(
+            (norm - 1.0).abs() < 1e-3,
+            "expected unit-normalized, got {norm}"
+        );
     }
 
     let related = cosine(&vectors[0], &vectors[1]);

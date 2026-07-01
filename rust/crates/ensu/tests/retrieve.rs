@@ -14,9 +14,10 @@ use ente_ensu::retrieval::RetrievalIndex;
 
 #[test]
 fn end_to_end_retrieval_on_real_index() {
-    let (Ok(model_path), Ok(index_dir)) =
-        (std::env::var("ENSU_EMBED_GGUF"), std::env::var("ENSU_INDEX_DIR"))
-    else {
+    let (Ok(model_path), Ok(index_dir)) = (
+        std::env::var("ENSU_EMBED_GGUF"),
+        std::env::var("ENSU_INDEX_DIR"),
+    ) else {
         eprintln!("skipping: set ENSU_EMBED_GGUF and ENSU_INDEX_DIR to run");
         return;
     };
@@ -50,7 +51,10 @@ fn end_to_end_retrieval_on_real_index() {
     for hit in &hits {
         println!("  {:.3}  {}", hit.score, hit.passage.title);
     }
-    assert!(!hits.is_empty(), "expected at least one hit above the 0.45 gate");
+    assert!(
+        !hits.is_empty(),
+        "expected at least one hit above the 0.45 gate"
+    );
     assert!(
         hits[0].passage.title.contains("Everest"),
         "top hit should be about Everest, got '{}'",

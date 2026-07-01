@@ -129,7 +129,12 @@ impl RetrievalIndex {
     ///
     /// Returns hits sorted by descending score; empty when nothing clears the
     /// gate, which the caller treats as "don't inject retrieved context".
-    pub fn search(&self, query: &[f32], k: usize, threshold: f32) -> Result<Vec<SearchHit>, String> {
+    pub fn search(
+        &self,
+        query: &[f32],
+        k: usize,
+        threshold: f32,
+    ) -> Result<Vec<SearchHit>, String> {
         if query.len() != self.dim {
             return Err(format!(
                 "query has {} dims, index expects {}",
@@ -155,9 +160,8 @@ impl RetrievalIndex {
 
         // Partial-select the top-k instead of fully sorting every above-threshold
         // hit, then sort just those k.
-        let by_score_desc = |a: &(f32, usize), b: &(f32, usize)| {
-            b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal)
-        };
+        let by_score_desc =
+            |a: &(f32, usize), b: &(f32, usize)| b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal);
         if scored.len() > k {
             scored.select_nth_unstable_by(k - 1, by_score_desc);
             scored.truncate(k);
