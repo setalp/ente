@@ -107,7 +107,18 @@ class RustRetrievalProvider(
     /** Load index + embedding context. Caller must hold [loadMutex]. */
     private fun ensureLoadedLocked() {
         if (index == null) {
-            index = RetrievalIndex.open(indexDir.absolutePath)
+            index = try {
+                RetrievalIndex.open(indexDir.absolutePath)
+            } catch (error: Throwable) {
+                // isReady only checks file length, so a right-size-but-corrupt index
+                // (bad sideload / bit-rot) passes it yet fails to open here. Purge the
+                // index files so isReady flips false and the UI re-offers the download
+                // (self-heal) instead of silently disabling retrieval forever. The
+                // embedding model is left intact — a load failure there is more likely
+                // transient (e.g. OOM while the chat model is resident) than corruption.
+                purgeIndexFilesLocked()
+                throw error
+            }
         }
         if (embeddingContext == null) {
             llmInitBackend()
@@ -168,7 +179,12 @@ class RustRetrievalProvider(
                 for (asset in assets) {
                     if (complete(asset)) continue
                     val tmp = partFile(asset)
-                    if (tmp.exists() && tmp.length() > asset.size) tmp.delete() // corrupt partial
+                    // Delete a partial that is >= the full size: an over-length one
+                    // is corrupt, and an exactly-full one (written but killed before
+                    // verify/rename) would otherwise send `Range: bytes=<size>-` and
+                    // get a permanent HTTP 416, wedging the download forever. Start it
+                    // fresh instead.
+                    if (tmp.exists() && tmp.length() >= asset.size) tmp.delete()
                     var existing = if (tmp.exists()) tmp.length() else 0L
 
                     val request = Request.Builder().url(assetUrl(asset.target.name))
@@ -228,6 +244,11 @@ class RustRetrievalProvider(
     }
 
     private fun complete(asset: RagAsset) = asset.target.exists() && asset.target.length() == asset.size
+
+    /** Delete the on-disk index files (not the embedding model). Caller holds [loadMutex]. */
+    private fun purgeIndexFilesLocked() {
+        assets.filter { it.target != embeddingModelPath }.forEach { it.target.delete() }
+    }
 
     private fun partFile(asset: RagAsset) = File(asset.target.parentFile, "${asset.target.name}.part")
 

@@ -157,9 +157,15 @@ internal fun HomeNavigation(
                         onSignIn = onSignIn,
                         wikipediaRetrievalEnabled = appState.developerSettings.wikipediaRetrievalEnabled,
                         retrievalAssets = appState.retrievalAssets,
-                        // Persisting re-emits via settingsFlow -> applyPersistedSettings,
-                        // which updates in-memory developerSettings (mirrors systemPrompt).
                         onToggleWikipediaRetrieval = { enabled ->
+                            // Update in-memory state immediately so the next message
+                            // (retrieveWikipediaContext) and the next download decision
+                            // (willDownloadRetrieval) see the new value; the DataStore
+                            // persist below is async. Mirrors the systemPrompt / model
+                            // settings handlers, which also update-then-persist.
+                            store.updateDeveloperSettings(
+                                appState.developerSettings.copy(wikipediaRetrievalEnabled = enabled)
+                            )
                             advancedSettingsDataStore.persistWikipediaRetrievalEnabled(enabled)
                         },
                         onDownloadRetrievalAssets = { store.downloadRetrievalAssets() }

@@ -66,8 +66,15 @@ impl RetrievalIndex {
             .map_err(|err| format!("Failed to read manifest.json: {err}"))?;
         let manifest: Manifest = serde_json::from_str(&manifest_text)
             .map_err(|err| format!("Failed to parse manifest.json: {err}"))?;
-        if manifest.dim == 0 || manifest.scale == 0.0 {
-            return Err("Manifest dim/scale must be non-zero".to_string());
+        // Require a finite, strictly-positive scale. `!is_finite()` rejects NaN
+        // and infinities; `<= 0.0` rejects zero and negatives. A bare `!= 0.0`
+        // check would let NaN/negative through and silently produce NaN/inverted
+        // similarities so nothing ever clears the gate — defeating the intent
+        // that a bad index fails loudly rather than returning empty forever.
+        if manifest.dim == 0 || !manifest.scale.is_finite() || manifest.scale <= 0.0 {
+            return Err(
+                "Manifest dim must be non-zero and scale must be finite and > 0".to_string(),
+            );
         }
 
         let file = File::open(dir.join("vectors.i8"))
@@ -151,8 +158,12 @@ impl RetrievalIndex {
             let mut dot = 0.0f32;
             for d in 0..self.dim {
                 // mmap bytes are u8; reinterpret as two's-complement int8.
-                dot += query[d] * (f32::from(chunk[d] as i8) * self.inv_scale);
+                dot += query[d] * f32::from(chunk[d] as i8);
             }
+            // Apply the constant int8 dequant scale once per row rather than once
+            // per element (240k×768 fewer multiplies per query); the stored vectors
+            // were unit-normalized before quantization so this approximates cosine.
+            let dot = dot * self.inv_scale;
             if dot >= threshold {
                 scored.push((dot, row));
             }

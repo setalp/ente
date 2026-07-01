@@ -516,9 +516,9 @@ internal class ChatStoreActions(
             val generationLimits = resolveGenerationLimits(target)
             // Retrieve before history selection so the injected context is counted
             // against the input budget (otherwise it can overflow the context window).
-            val retrievedContext = retrieveWikipediaContext(userMessage.text)
+            var retrievedContext = retrieveWikipediaContext(userMessage.text)
             val retrievedContextTokens = retrievedContext?.let { estimateTokens(it) } ?: 0
-            val historySelection = buildHistorySelection(
+            var historySelection = buildHistorySelection(
                 sessionId = sessionId,
                 promptText = prompt.text,
                 promptImageCount = prompt.imageFiles.size,
@@ -526,6 +526,30 @@ internal class ChatStoreActions(
                 limits = generationLimits,
                 extraContextTokens = retrievedContextTokens
             )
+
+            // Retrieval is best-effort: if the injected context is what tips the
+            // input over budget, drop the context and proceed rather than blocking
+            // the user's message with an overflow dialog they never triggered. A
+            // genuine history overflow (trimmed even without retrieval) still shows.
+            if (retrievedContext != null && historySelection.wasTrimmed) {
+                val withoutRetrieval = buildHistorySelection(
+                    sessionId = sessionId,
+                    promptText = prompt.text,
+                    promptImageCount = prompt.imageFiles.size,
+                    currentMessageId = userMessage.id,
+                    limits = generationLimits,
+                    extraContextTokens = 0
+                )
+                if (!withoutRetrieval.wasTrimmed) {
+                    logRepository.log(
+                        LogLevel.Info,
+                        "Dropped Wikipedia context to avoid overflow",
+                        tag = "Retrieval"
+                    )
+                    retrievedContext = null
+                    historySelection = withoutRetrieval
+                }
+            }
 
             if (historySelection.wasTrimmed && overflowBypassMessageId != userMessage.id) {
                 overflowBypassMessageId = null
@@ -560,10 +584,12 @@ internal class ChatStoreActions(
             )
             // Inject the retrieved context (computed above, already counted in the
             // budget) as a system message after the system prompt, before history.
+            // Capture into a stable val so it smart-casts inside the buildList lambda.
+            val injectedContext = retrievedContext
             val llmMessages = buildList {
                 add(systemMessage)
-                if (retrievedContext != null) {
-                    add(LlmMessage(text = retrievedContext, role = LlmMessageRole.System))
+                if (injectedContext != null) {
+                    add(LlmMessage(text = injectedContext, role = LlmMessageRole.System))
                 }
                 addAll(history)
                 add(

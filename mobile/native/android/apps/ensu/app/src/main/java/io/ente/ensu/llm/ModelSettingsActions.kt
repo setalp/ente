@@ -306,26 +306,23 @@ internal class ModelSettingsActions(
         if (provider.isReady) return
         try {
             provider.downloadAssets { percent ->
+                // Drive the shared model-download UI (this runs inside the model job)…
                 state.update { appState ->
                     appState.copy(
                         chat = appState.chat.copy(
                             isDownloading = true,
                             downloadPercent = percent,
                             downloadStatus = "Downloading Wikipedia data... $percent%"
-                        ),
-                        retrievalAssets = appState.retrievalAssets.copy(
-                            downloading = true, percent = percent, error = null
                         )
                     )
                 }
+                // …and the retrievalAssets slice via the same transition the Settings
+                // path uses, so the two entry points can't report progress differently.
+                state.setRetrievalDownloading(percent)
             }
             // Mark assets ready; the caller does the atomic chat reveal so there's
             // no flicker between "model done" and "data done".
-            state.update { appState ->
-                appState.copy(
-                    retrievalAssets = appState.retrievalAssets.copy(ready = true, downloading = false, percent = 100)
-                )
-            }
+            state.setRetrievalReady()
         } catch (err: Throwable) {
             // Let cancellation propagate (the model-download job is being cancelled).
             if (err is kotlinx.coroutines.CancellationException) throw err
@@ -338,14 +335,7 @@ internal class ModelSettingsActions(
             )
             // Surface the failure in the Settings retrieval row (chat still reveals;
             // the model is usable without retrieval).
-            state.update { appState ->
-                appState.copy(
-                    retrievalAssets = appState.retrievalAssets.copy(
-                        downloading = false,
-                        error = err.message ?: "Download failed"
-                    )
-                )
-            }
+            state.setRetrievalError(err.message ?: "Download failed")
         }
     }
 

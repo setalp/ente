@@ -8,7 +8,9 @@ import io.ente.ensu.device.ChatDeviceCapability
 import io.ente.ensu.device.AndroidDeviceCapabilityProvider
 import io.ente.ensu.llm.RustLlmProvider
 import io.ente.ensu.llm.RetrievalProvider
-import io.ente.ensu.llm.RetrievalAssetsState
+import io.ente.ensu.llm.setRetrievalDownloading
+import io.ente.ensu.llm.setRetrievalReady
+import io.ente.ensu.llm.setRetrievalError
 import io.ente.ensu.logging.FileLogRepository
 import io.ente.ensu.chat.Attachment
 import io.ente.ensu.chat.ChatMessage
@@ -82,17 +84,11 @@ class AppStore(
         val provider = retrievalProvider ?: return
         val scope = appScope ?: return
         if (_state.value.retrievalAssets.downloading) return
-        _state.update {
-            it.copy(retrievalAssets = it.retrievalAssets.copy(downloading = true, percent = 0, error = null))
-        }
+        _state.setRetrievalDownloading(0)
         scope.launch {
             try {
-                provider.downloadAssets { percent ->
-                    _state.update { it.copy(retrievalAssets = it.retrievalAssets.copy(percent = percent)) }
-                }
-                _state.update {
-                    it.copy(retrievalAssets = RetrievalAssetsState(ready = true, downloading = false, percent = 100))
-                }
+                provider.downloadAssets { percent -> _state.setRetrievalDownloading(percent) }
+                _state.setRetrievalReady()
             } catch (error: Throwable) {
                 logRepository.log(
                     LogLevel.Error,
@@ -100,14 +96,7 @@ class AppStore(
                     details = error.message,
                     tag = "Retrieval"
                 )
-                _state.update {
-                    it.copy(
-                        retrievalAssets = it.retrievalAssets.copy(
-                            downloading = false,
-                            error = error.message ?: "Download failed"
-                        )
-                    )
-                }
+                _state.setRetrievalError(error.message ?: "Download failed")
             }
         }
     }
