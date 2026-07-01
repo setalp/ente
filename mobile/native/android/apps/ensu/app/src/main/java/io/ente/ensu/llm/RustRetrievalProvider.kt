@@ -107,18 +107,14 @@ class RustRetrievalProvider(
     /** Load index + embedding context. Caller must hold [loadMutex]. */
     private fun ensureLoadedLocked() {
         if (index == null) {
-            index = try {
-                RetrievalIndex.open(indexDir.absolutePath)
-            } catch (error: Throwable) {
-                // isReady only checks file length, so a right-size-but-corrupt index
-                // (bad sideload / bit-rot) passes it yet fails to open here. Purge the
-                // index files so isReady flips false and the UI re-offers the download
-                // (self-heal) instead of silently disabling retrieval forever. The
-                // embedding model is left intact — a load failure there is more likely
-                // transient (e.g. OOM while the chat model is resident) than corruption.
-                purgeIndexFilesLocked()
-                throw error
-            }
+            // Note: `isReady` only checks file length, so a right-size-but-corrupt
+            // index (bad sideload / bit-rot) passes it yet fails to open here. We
+            // deliberately do NOT delete the files on failure — open() can also fail
+            // transiently under memory pressure (mmap ENOMEM, OOM reading meta.jsonl),
+            // and deleting would destroy sideloaded data and force a network
+            // re-download. The failure propagates to search()'s best-effort catch, so
+            // retrieval degrades to off (logged) rather than corrupting state.
+            index = RetrievalIndex.open(indexDir.absolutePath)
         }
         if (embeddingContext == null) {
             llmInitBackend()
@@ -244,11 +240,6 @@ class RustRetrievalProvider(
     }
 
     private fun complete(asset: RagAsset) = asset.target.exists() && asset.target.length() == asset.size
-
-    /** Delete the on-disk index files (not the embedding model). Caller holds [loadMutex]. */
-    private fun purgeIndexFilesLocked() {
-        assets.filter { it.target != embeddingModelPath }.forEach { it.target.delete() }
-    }
 
     private fun partFile(asset: RagAsset) = File(asset.target.parentFile, "${asset.target.name}.part")
 
