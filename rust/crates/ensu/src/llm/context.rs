@@ -1,5 +1,5 @@
 use llama_cpp_2::context::LlamaContext;
-use llama_cpp_2::context::params::LlamaContextParams;
+use llama_cpp_2::context::params::{LlamaContextParams, LlamaPoolingType};
 use llama_cpp_2::model::LlamaModel;
 use llama_cpp_2::mtmd::{MtmdContext, MtmdContextParams, mtmd_default_marker};
 use parking_lot::Mutex;
@@ -18,6 +18,11 @@ pub struct ContextParams {
     pub context_size: Option<i32>,
     pub n_threads: Option<i32>,
     pub n_batch: Option<i32>,
+    /// When true, create the context in embedding mode (mean pooling) so
+    /// `embed()` can read pooled sequence embeddings. Used for the retrieval
+    /// embedding model (EmbeddingGemma), not for chat generation contexts.
+    #[serde(default)]
+    pub embeddings: Option<bool>,
 }
 
 self_cell!(
@@ -161,6 +166,15 @@ pub fn create_context(
     if let Some(n_batch) = params.n_batch {
         let n_batch = u32::try_from(n_batch).map_err(|_| "n_batch must be > 0".to_string())?;
         context_params = context_params.with_n_batch(n_batch);
+    }
+
+    if params.embeddings.unwrap_or(false) {
+        // Mean pooling yields one fixed-size vector per sequence, which
+        // `embeddings_seq_ith` reads. (Pooling type NONE would only expose
+        // per-token embeddings and make the seq read fail.)
+        context_params = context_params
+            .with_embeddings(true)
+            .with_pooling_type(LlamaPoolingType::Mean);
     }
 
     let context = ContextHandle::try_new(model, |model| {

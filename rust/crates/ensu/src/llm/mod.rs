@@ -1,10 +1,12 @@
 mod context;
+mod embed;
 mod event;
 mod generate;
 mod model;
 mod model_download;
 
 pub use context::*;
+pub use embed::*;
 pub use event::*;
 pub use generate::*;
 pub use model::*;

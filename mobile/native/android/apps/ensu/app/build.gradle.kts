@@ -98,6 +98,8 @@ android {
 
     buildFeatures {
         compose = true
+        // Fork: BuildConfig.DEBUG gates verbose RAG Q&A logging (AppViewModel).
+        buildConfig = true
     }
 
     composeOptions {

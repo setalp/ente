@@ -1,0 +1,6 @@
+.venv/
+index/
+index-*/
+gguf/
+__pycache__/
+*.npy

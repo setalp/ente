@@ -7,6 +7,7 @@ ente-core.workspace = true
 ente-image.workspace = true
 flate2 = { version = "1", optional = true }
 futures-util = "0.3"
+memmap2 = "0.9"
 parking_lot = "0.12"
 regex = { version = "1", optional = true }
 reqwest = { version = "0.12", default-features = false, features = ["http2", "charset", "system-proxy", "rustls-tls-webpki-roots"] }
