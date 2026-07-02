@@ -23,6 +23,7 @@ import io.ente.ensu.AppState
 import io.ente.ensu.settings.DeveloperSettingsState
 import io.ente.ensu.llm.ModelSettingsState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,11 +82,21 @@ class AppStore(
     /** Reflect per-corpus retrieval asset readiness on-device. */
     fun refreshRetrievalReady() {
         val provider = retrievalProvider ?: return
+        // corpora() stats every corpus file — keep it off the main thread and out
+        // of the update{} lambda (which can re-run under CAS contention).
+        val scope = appScope
+        if (scope == null) {
+            applyRetrievalReadiness(provider.corpora())
+        } else {
+            scope.launch(Dispatchers.IO) { applyRetrievalReadiness(provider.corpora()) }
+        }
+    }
+
+    private fun applyRetrievalReadiness(info: List<CorpusInfo>) {
         _state.update { st ->
-            val updated = provider.corpora().associate { info ->
-                info.id to (st.retrievalAssets[info.id] ?: RetrievalAssetsState()).copy(ready = info.ready)
-            }
-            st.copy(retrievalAssets = updated)
+            st.copy(retrievalAssets = info.associate { c ->
+                c.id to (st.retrievalAssets[c.id] ?: RetrievalAssetsState()).copy(ready = c.ready)
+            })
         }
     }
 

@@ -274,7 +274,6 @@ class RustRetrievalProvider(
             retrievalDir.mkdirs()
             assets.forEach { it.target.parentFile?.mkdirs() }
 
-            val total = assets.sumOf { it.size }.coerceAtLeast(1L)
             val needed = assets.filterNot { complete(it) }.sumOf { it.size }
             val available = retrievalDir.usableSpace
             if (available in 1 until (needed + FREE_SPACE_MARGIN)) {
@@ -286,8 +285,12 @@ class RustRetrievalProvider(
 
             val client = OkHttpClient()
             try {
-                var done = assets.sumOf { if (complete(it)) it.size else 0L }
-                onProgress(((done * 100) / total).toInt().coerceIn(0, 100))
+                // Progress is measured against `needed` (bytes still to fetch), not the
+                // whole set — otherwise an already-present shared embedding model would
+                // make a corpus download start at a large non-zero percent.
+                val denom = needed.coerceAtLeast(1L)
+                var done = 0L
+                onProgress(((done * 100) / denom).toInt().coerceIn(0, 100))
 
                 for (asset in assets) {
                     if (complete(asset)) continue
@@ -319,7 +322,7 @@ class RustRetrievalProvider(
                                     if (n < 0) break
                                     out.write(buf, 0, n)
                                     done += n
-                                    onProgress(((done * 100) / total).toInt().coerceIn(0, 100))
+                                    onProgress(((done * 100) / denom).toInt().coerceIn(0, 100))
                                 }
                             }
                         }

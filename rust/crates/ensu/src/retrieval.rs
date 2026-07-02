@@ -200,15 +200,17 @@ impl RetrievalIndex {
         scored.sort_unstable_by(by_score_desc);
 
         // Parse only the surviving top-k passages from the mmap (not all rows).
-        scored
+        // A row that fails to parse (corrupt sideload / bit-rot — downloads are
+        // SHA-256 verified) is skipped rather than failing the whole query, so one
+        // bad row can't drop the other top-k hits.
+        Ok(scored
             .into_iter()
-            .map(|(score, row)| {
-                Ok(SearchHit {
-                    score,
-                    passage: self.passage(row)?,
-                })
+            .filter_map(|(score, row)| {
+                self.passage(row)
+                    .ok()
+                    .map(|passage| SearchHit { score, passage })
             })
-            .collect()
+            .collect())
     }
 }
 

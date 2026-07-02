@@ -297,11 +297,6 @@ internal class ModelSettingsActions(
         }
     }
 
-    /**
-     * Download the Wikipedia retrieval assets as a continuation of the model
-     * download (same progress UI). Best-effort: a failure here must not fail the
-     * model download — the chat model is already usable without retrieval.
-     */
     /** Whether the shared embedding model (retrieval prerequisite) is present. */
     private fun embeddingModelReady(): Boolean =
         retrievalProvider?.isEmbeddingModelReady == true
