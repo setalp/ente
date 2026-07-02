@@ -1,4 +1,4 @@
-//! On-device retrieval index for Ensu Wikipedia RAG.
+//! On-device retrieval index for Ensu knowledge RAG (Wikipedia, Wikivoyage, …).
 //!
 //! Loads a prebuilt, read-only index (int8 vectors + passage metadata) and does
 //! a brute-force cosine top-k with a similarity-threshold gate. Embedding the
@@ -10,8 +10,16 @@
 //!   vectors.i8     raw int8, row-major `count * dim` (unit vectors * scale)
 //!   meta.jsonl     one {id,title,url,text} per line, aligned to vector rows
 //!
-//! Brute force is fine for v1: ~240k passages × 768 dims is a few hundred MB of
-//! int8 and a single linear scan per query; no ANN structure needed yet.
+//! Both `vectors.i8` and `meta.jsonl` are **memory-mapped**, not read onto the
+//! heap. Vectors are scanned per query; passage metadata is parsed lazily — only
+//! the top-k hit rows are deserialized, from byte offsets recorded at open. This
+//! keeps heap flat regardless of corpus size, which matters once several corpora
+//! (Wikipedia ~118 MB + Wikivoyage ~219 MB of text) are open at once alongside
+//! the chat model; eagerly parsing every Passage would cost hundreds of MB of
+//! resident heap.
+//!
+//! Brute force is fine for v1: a few hundred k passages × 768 dims of int8 is a
+//! single linear scan per query; no ANN structure needed yet.
 
 use memmap2::Mmap;
 use serde::{Deserialize, Serialize};
@@ -48,11 +56,17 @@ pub struct RetrievalIndex {
     dim: usize,
     inv_scale: f32,
     // Memory-mapped int8 vectors (row-major count*dim). mmap keeps these pages
-    // clean/OS-evictable instead of ~180 MB of dirty heap, which matters when
-    // the chat model is also resident on-device. Raw bytes are two's-complement
+    // clean/OS-evictable instead of ~hundreds of MB of dirty heap, which matters
+    // when the chat model is also resident on-device. Raw bytes are two's-complement
     // int8 read as u8.
     vectors: Mmap,
-    passages: Vec<Passage>,
+    // Memory-mapped meta.jsonl. Passages are parsed on demand (see `rows`).
+    meta: Mmap,
+    // Byte range [start, end) of each non-empty meta.jsonl line, aligned to the
+    // vector rows. We record offsets at open (one cheap scan for newlines) and
+    // deserialize a Passage only when it lands in a query's top-k, so the passage
+    // text stays memory-mapped rather than parsed onto the heap.
+    rows: Vec<(usize, usize)>,
 }
 
 impl RetrievalIndex {
@@ -95,20 +109,18 @@ impl RetrievalIndex {
             ));
         }
 
-        let meta_text = fs::read_to_string(dir.join("meta.jsonl"))
-            .map_err(|err| format!("Failed to read meta.jsonl: {err}"))?;
-        let passages: Vec<Passage> = meta_text
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(|line| {
-                serde_json::from_str(line)
-                    .map_err(|err| format!("Failed to parse meta.jsonl row: {err}"))
-            })
-            .collect::<Result<_, _>>()?;
-        if passages.len() != manifest.count {
+        let meta_file = File::open(dir.join("meta.jsonl"))
+            .map_err(|err| format!("Failed to open meta.jsonl: {err}"))?;
+        // SAFETY: read-only asset, same as vectors above.
+        let meta = unsafe { Mmap::map(&meta_file) }
+            .map_err(|err| format!("Failed to mmap meta.jsonl: {err}"))?;
+        let rows = line_ranges(&meta);
+        // Validate row count without parsing content — a truncated meta.jsonl
+        // still fails loudly here, matching the eager-parse behaviour it replaces.
+        if rows.len() != manifest.count {
             return Err(format!(
                 "meta.jsonl has {} rows, expected {}",
-                passages.len(),
+                rows.len(),
                 manifest.count
             ));
         }
@@ -117,16 +129,24 @@ impl RetrievalIndex {
             dim: manifest.dim,
             inv_scale: 1.0 / manifest.scale,
             vectors,
-            passages,
+            meta,
+            rows,
         })
     }
 
     pub fn len(&self) -> usize {
-        self.passages.len()
+        self.rows.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.passages.is_empty()
+        self.rows.is_empty()
+    }
+
+    /// Parse the passage at `row` from the mmap'd meta.jsonl on demand.
+    fn passage(&self, row: usize) -> Result<Passage, String> {
+        let (start, end) = self.rows[row];
+        serde_json::from_slice(&self.meta[start..end])
+            .map_err(|err| format!("Failed to parse meta.jsonl row {row}: {err}"))
     }
 
     /// Cosine top-k over the index, keeping only hits at or above `threshold`
@@ -161,8 +181,8 @@ impl RetrievalIndex {
                 dot += query[d] * f32::from(chunk[d] as i8);
             }
             // Apply the constant int8 dequant scale once per row rather than once
-            // per element (240k×768 fewer multiplies per query); the stored vectors
-            // were unit-normalized before quantization so this approximates cosine.
+            // per element (fewer multiplies per query); the stored vectors were
+            // unit-normalized before quantization so this approximates cosine.
             let dot = dot * self.inv_scale;
             if dot >= threshold {
                 scored.push((dot, row));
@@ -179,12 +199,101 @@ impl RetrievalIndex {
         }
         scored.sort_unstable_by(by_score_desc);
 
-        Ok(scored
+        // Parse only the surviving top-k passages from the mmap (not all rows).
+        scored
             .into_iter()
-            .map(|(score, row)| SearchHit {
-                score,
-                passage: self.passages[row].clone(),
+            .map(|(score, row)| {
+                Ok(SearchHit {
+                    score,
+                    passage: self.passage(row)?,
+                })
             })
-            .collect())
+            .collect()
+    }
+}
+
+/// Byte ranges [start, end) of each non-empty (non-whitespace-only) line in
+/// `bytes`, excluding the trailing newline. Mirrors the old `lines().filter(!empty)`
+/// so blank/trailing lines don't create phantom rows.
+fn line_ranges(bytes: &[u8]) -> Vec<(usize, usize)> {
+    let mut rows = Vec::new();
+    let mut start = 0usize;
+    // memchr is SIMD-accelerated; scanning a ~200 MB meta.jsonl byte-by-byte at
+    // open would cost hundreds of ms and undercut the lazy-parse win.
+    for nl in memchr::memchr_iter(b'\n', bytes) {
+        push_if_nonempty(bytes, start, nl, &mut rows);
+        start = nl + 1;
+    }
+    // Final line if the file doesn't end in a newline.
+    push_if_nonempty(bytes, start, bytes.len(), &mut rows);
+    rows
+}
+
+fn push_if_nonempty(bytes: &[u8], start: usize, end: usize, rows: &mut Vec<(usize, usize)>) {
+    if end > start && !bytes[start..end].iter().all(|b| b.is_ascii_whitespace()) {
+        rows.push((start, end));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    /// Write a tiny 2-row index to a per-test temp dir and return its path.
+    /// `name` must be unique per test — cargo runs tests as parallel threads of
+    /// one process, so a shared path would race.
+    fn write_index(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir()
+            .join(format!("ensu_retr_test_{}_{}", std::process::id(), name));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("manifest.json"),
+            r#"{"model":"test","dim":2,"count":2,"scale":127.0}"#,
+        )
+        .unwrap();
+        // Row 0 = unit (1,0)*127, row 1 = unit (0,1)*127.
+        fs::write(dir.join("vectors.i8"), [127i8 as u8, 0, 0, 127i8 as u8]).unwrap();
+        // Trailing newline + a blank line must NOT create phantom rows.
+        let mut meta = File::create(dir.join("meta.jsonl")).unwrap();
+        writeln!(meta, r#"{{"id":"a","title":"Alpha","url":"ua","text":"ta"}}"#).unwrap();
+        writeln!(meta, r#"{{"id":"b","title":"Beta","url":"ub","text":"tb"}}"#).unwrap();
+        writeln!(meta).unwrap();
+        dir
+    }
+
+    #[test]
+    fn opens_and_counts_rows_ignoring_blank_lines() {
+        let dir = write_index("count");
+        let index = RetrievalIndex::open(&dir).unwrap();
+        assert_eq!(index.len(), 2);
+        assert!(!index.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn search_gates_and_lazily_parses_top_row() {
+        let dir = write_index("search");
+        let index = RetrievalIndex::open(&dir).unwrap();
+        // Query aligned with row 0; row 1 (orthogonal) scores 0 and is gated out.
+        let hits = index.search(&[1.0, 0.0], 5, 0.5).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].passage.title, "Alpha");
+        assert!((hits[0].score - 1.0).abs() < 1e-4);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn truncated_meta_fails_to_open() {
+        let dir = write_index("truncated");
+        // Manifest says count=2 but leave only one row.
+        fs::write(
+            dir.join("meta.jsonl"),
+            "{\"id\":\"a\",\"title\":\"Alpha\",\"url\":\"ua\",\"text\":\"ta\"}\n",
+        )
+        .unwrap();
+        assert!(RetrievalIndex::open(&dir).is_err());
+        let _ = fs::remove_dir_all(&dir);
     }
 }
