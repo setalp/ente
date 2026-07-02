@@ -246,8 +246,8 @@ mod tests {
     /// `name` must be unique per test — cargo runs tests as parallel threads of
     /// one process, so a shared path would race.
     fn write_index(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir()
-            .join(format!("ensu_retr_test_{}_{}", std::process::id(), name));
+        let dir =
+            std::env::temp_dir().join(format!("ensu_retr_test_{}_{}", std::process::id(), name));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         fs::write(
@@ -259,8 +259,16 @@ mod tests {
         fs::write(dir.join("vectors.i8"), [127i8 as u8, 0, 0, 127i8 as u8]).unwrap();
         // Trailing newline + a blank line must NOT create phantom rows.
         let mut meta = File::create(dir.join("meta.jsonl")).unwrap();
-        writeln!(meta, r#"{{"id":"a","title":"Alpha","url":"ua","text":"ta"}}"#).unwrap();
-        writeln!(meta, r#"{{"id":"b","title":"Beta","url":"ub","text":"tb"}}"#).unwrap();
+        writeln!(
+            meta,
+            r#"{{"id":"a","title":"Alpha","url":"ua","text":"ta"}}"#
+        )
+        .unwrap();
+        writeln!(
+            meta,
+            r#"{{"id":"b","title":"Beta","url":"ub","text":"tb"}}"#
+        )
+        .unwrap();
         writeln!(meta).unwrap();
         dir
     }
