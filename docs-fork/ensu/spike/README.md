@@ -43,13 +43,40 @@ python search.py --interactive               # eyeball quality, tune --threshold
 
 Expected full index: ~240k × 768d int8 ≈ **180 MB** of vectors + `meta.jsonl`.
 
+## Wikivoyage (second corpus)
+
+`build_wikivoyage.py` builds a **section-chunked** index from the Wikimedia
+`enwikivoyage` dump (auto-downloaded, ~123 MB). Unlike Wikipedia (lead-only),
+Wikivoyage's value is in the sections (See / Do / Eat / Sleep / Get in) and in
+its **listing templates** (`{{see}}`, `{{eat}}`, …), which carry each POI's
+name + description — so we chunk per section and extract listings explicitly.
+It reuses `build_index.py`'s embed + int8 + index-writing, so the output is the
+same format (`search.py` and the Rust `RetrievalIndex` read it unchanged; meta
+rows just gain an extra ignored `section` field).
+
+```bash
+# fast plumbing smoke (non-gated model, first N articles)
+python build_wikivoyage.py --limit 4000 --out index-wv-smoke \
+    --model sentence-transformers/all-MiniLM-L6-v2
+# full curated build (EmbeddingGemma; destinations-only, ~26k articles)
+python build_wikivoyage.py --out index-wikivoyage
+python search.py --index index-wikivoyage --interactive
+```
+
+Curated build (destinations-only, `max_chars=900`, 768-dim int8): **26,145
+articles → 357,890 chunks → ~441 MB** (275 MB vectors + 167 MB meta). Article-type
+filtering (`keep_article`) drops region/country/topic/itinerary/phrasebook/
+disambiguation pages; the full un-curated corpus is ~609k chunks / ~700 MB.
+See `../retrieval-design.md` → "Additional corpora".
+
 ## Files
 
 | File | Role |
 |---|---|
-| `build_index.py` | dataset → lead extraction → embed → int8 → `index/` |
-| `search.py` | embed query → cosine top-k → threshold-gate preview |
-| `requirements.txt` | sentence-transformers, datasets, numpy |
+| `build_index.py` | Wikipedia: dataset → lead extraction → embed → int8 → `index/`; shared `shard_embed`/`write_index` helpers |
+| `build_wikivoyage.py` | Wikivoyage: dump → section chunking + listing extraction → `index-wikivoyage/` |
+| `search.py` | embed query → cosine top-k → threshold-gate preview (any index dir) |
+| `requirements.txt` | sentence-transformers, datasets, numpy, mwparserfromhell |
 
 ## What we're validating
 

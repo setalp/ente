@@ -4,3 +4,6 @@ index-*/
 gguf/
 __pycache__/
 *.npy
+*.bz2
+*.xml
+*.log
