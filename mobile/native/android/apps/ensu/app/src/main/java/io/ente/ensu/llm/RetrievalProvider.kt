@@ -1,30 +1,51 @@
 package io.ente.ensu.llm
 
 /**
- * On-device retrieval over a prebuilt knowledge index (Wikipedia for v1).
+ * On-device retrieval over one or more prebuilt knowledge corpora (Wikipedia +
+ * Wikivoyage for v1).
  *
  * Implementations embed the query locally and return the top passages that
- * clear a similarity threshold. An empty result means the gate rejected
+ * clear a similarity threshold, merged across every available corpus and tagged
+ * with their [RetrievedPassage.source]. An empty result means the gate rejected
  * everything and no context should be injected into the prompt. See
  * docs-fork/ensu/retrieval-design.md.
  */
 interface RetrievalProvider {
-    /** True when the embedding model and index are present on-device. */
-    val isReady: Boolean
+    /** True when the shared embedding model is present (retrieval prerequisite). */
+    val isEmbeddingModelReady: Boolean
 
     /**
-     * Download the embedding model + index assets onto the device (for shared
-     * builds where they aren't sideloaded). [onProgress] receives 0..100.
-     * Skips files already present at the expected size; throws on failure.
+     * Bytes still needed to fetch the embedding model (0 if already present).
+     * Added to the chat-model estimate so the first-run "Download" size reflects
+     * the embedding model bundled alongside it.
      */
-    suspend fun downloadAssets(onProgress: (percent: Int) -> Unit)
+    fun embeddingDownloadBytesRemaining(): Long
 
     /**
-     * Embed [query] and return up to [k] passages with cosine score >= [threshold],
-     * sorted by descending score. Returns empty if not ready or nothing clears the gate.
+     * Download just the shared embedding model — the retrieval prerequisite bundled
+     * alongside the chat model at first run. Datasets are downloaded on demand
+     * ([downloadCorpus]). [onProgress] receives 0..100; throws on failure.
+     */
+    suspend fun downloadEmbeddingModel(onProgress: (percent: Int) -> Unit)
+
+    /** Per-corpus on-device status, for the Knowledge settings screen. */
+    fun corpora(): List<CorpusInfo>
+
+    /**
+     * Download the shared embedding model (if missing) + the given corpus's index,
+     * on user demand. Throws on failure / unknown / non-downloadable corpus.
+     */
+    suspend fun downloadCorpus(corpusId: String, onProgress: (percent: Int) -> Unit)
+
+    /**
+     * Embed [query] and search only the corpora whose id is in [enabledCorpusIds]
+     * (and that are present on-device), returning up to [k] passages with cosine
+     * score >= [threshold], merged and sorted by descending score. Empty if no
+     * enabled corpus is ready or nothing clears the gate.
      */
     suspend fun search(
         query: String,
+        enabledCorpusIds: Set<String>,
         k: Int = DEFAULT_K,
         threshold: Float = DEFAULT_THRESHOLD,
     ): List<RetrievedPassage>
@@ -42,8 +63,21 @@ interface RetrievalProvider {
 }
 
 data class RetrievedPassage(
+    /** Human-readable corpus this passage came from, e.g. "Wikipedia" / "Wikivoyage". */
+    val source: String,
     val title: String,
     val url: String,
     val text: String,
     val score: Float,
+)
+
+/** On-device status of one knowledge corpus, for the Settings data rows. */
+data class CorpusInfo(
+    val id: String,
+    val label: String,
+    val ready: Boolean,
+    /** Total download size in bytes (index files; the shared model is separate). */
+    val downloadBytes: Long,
+    /** False for sideload-only corpora whose assets aren't hosted yet. */
+    val downloadable: Boolean,
 )

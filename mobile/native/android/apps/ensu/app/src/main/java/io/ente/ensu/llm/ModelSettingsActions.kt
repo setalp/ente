@@ -136,7 +136,10 @@ internal class ModelSettingsActions(
                 }
             }
 
-            val size = llmProvider.estimateModelDownloadSize(target)
+            // Include the embedding model bundled with the chat model at first run,
+            // so the "Download" estimate reflects the full first-run download.
+            val embeddingRemaining = retrievalProvider?.embeddingDownloadBytesRemaining() ?: 0L
+            val size = llmProvider.estimateModelDownloadSize(target)?.plus(embeddingRemaining)
             state.update { appState ->
                 appState.copy(
                     chat = appState.chat.copy(
@@ -200,8 +203,7 @@ internal class ModelSettingsActions(
             // If the Wikipedia assets still need fetching, keep the download UI up
             // (don't mark the model "ready", which would reveal the chat screen)
             // until the bundled RAG download below also finishes.
-            val willDownloadRetrieval = state.value.developerSettings.wikipediaRetrievalEnabled &&
-                retrievalProvider?.isReady == false
+            val willDownloadRetrieval = retrievalProvider != null && !embeddingModelReady()
             try {
                 var retryCount = 0
                 while (true) {
@@ -300,42 +302,41 @@ internal class ModelSettingsActions(
      * download (same progress UI). Best-effort: a failure here must not fail the
      * model download — the chat model is already usable without retrieval.
      */
+    /** Whether the shared embedding model (retrieval prerequisite) is present. */
+    private fun embeddingModelReady(): Boolean =
+        retrievalProvider?.isEmbeddingModelReady == true
+
+    /**
+     * Download only the embedding model as a continuation of the chat-model download
+     * (same progress UI). Datasets are downloaded on demand from the Knowledge screen,
+     * not here. Best-effort: a failure must not fail the model download.
+     */
     private suspend fun downloadRetrievalAssetsIfNeeded() {
-        if (!state.value.developerSettings.wikipediaRetrievalEnabled) return
         val provider = retrievalProvider ?: return
-        if (provider.isReady) return
+        if (provider.isEmbeddingModelReady) return
         try {
-            provider.downloadAssets { percent ->
-                // Drive the shared model-download UI (this runs inside the model job)…
+            provider.downloadEmbeddingModel { percent ->
+                // Drive the shared model-download UI (this runs inside the model job).
                 state.update { appState ->
                     appState.copy(
                         chat = appState.chat.copy(
                             isDownloading = true,
                             downloadPercent = percent,
-                            downloadStatus = "Downloading Wikipedia data... $percent%"
+                            downloadStatus = "Downloading knowledge engine... $percent%"
                         )
                     )
                 }
-                // …and the retrievalAssets slice via the same transition the Settings
-                // path uses, so the two entry points can't report progress differently.
-                state.setRetrievalDownloading(percent)
             }
-            // Mark assets ready; the caller does the atomic chat reveal so there's
-            // no flicker between "model done" and "data done".
-            state.setRetrievalReady()
         } catch (err: Throwable) {
             // Let cancellation propagate (the model-download job is being cancelled).
             if (err is kotlinx.coroutines.CancellationException) throw err
             logRepository.log(
                 LogLevel.Warning,
-                "Wikipedia data download failed",
+                "Embedding model download failed",
                 details = err.message,
                 tag = "Retrieval",
                 throwable = err
             )
-            // Surface the failure in the Settings retrieval row (chat still reveals;
-            // the model is usable without retrieval).
-            state.setRetrievalError(err.message ?: "Download failed")
         }
     }
 

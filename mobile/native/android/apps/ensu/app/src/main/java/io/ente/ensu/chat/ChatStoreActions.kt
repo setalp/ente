@@ -48,7 +48,7 @@ internal class ChatStoreActions(
     private val modelSettingsActions: ModelSettingsActions,
     private val configDefaults: ConfigDefaults,
     // Null until wired in AppViewModel; when present and ready, retrieved
-    // Wikipedia context is injected before the user turn (see retrieveWikipediaContext).
+    // Knowledge context is injected before the user turn (see retrieveKnowledgeContext).
     private val retrievalProvider: RetrievalProvider? = null,
     // Logs full question+answer text to the local log file for RAG analysis.
     // Debug-only (set from BuildConfig.DEBUG) — never log chat content in release.
@@ -516,7 +516,7 @@ internal class ChatStoreActions(
             val generationLimits = resolveGenerationLimits(target)
             // Retrieve before history selection so the injected context is counted
             // against the input budget (otherwise it can overflow the context window).
-            var retrievedContext = retrieveWikipediaContext(userMessage.text)
+            var retrievedContext = retrieveKnowledgeContext(userMessage.text)
             val retrievedContextTokens = retrievedContext?.let { estimateTokens(it) } ?: 0
             var historySelection = buildHistorySelection(
                 sessionId = sessionId,
@@ -677,7 +677,7 @@ internal class ChatStoreActions(
                     LogLevel.Info,
                     "QA",
                     details = buildString {
-                        append("rag=").append(state.value.developerSettings.wikipediaRetrievalEnabled)
+                        append("rag=").append(enabledCorpusIds().joinToString(",").ifEmpty { "off" })
                         if (interrupted) append(" interrupted=true")
                         tokensPerSecond?.let { append(" tok/s=").append(String.format("%.1f", it)) }
                         append("\nQ: ").append(parentMessage.text)
@@ -1146,17 +1146,25 @@ internal class ChatStoreActions(
      * the similarity gate. Best-effort: errors are swallowed so a chat turn is
      * never blocked by retrieval. The threshold gate lives in the provider.
      */
-    private suspend fun retrieveWikipediaContext(query: String): String? {
-        if (!state.value.developerSettings.wikipediaRetrievalEnabled) return null
+    /** Downloaded corpora the user hasn't turned off — the datasets RAG may use. */
+    private fun enabledCorpusIds(): Set<String> {
+        val provider = retrievalProvider ?: return emptySet()
+        val disabled = state.value.developerSettings.disabledCorpora
+        return provider.corpora().filter { it.ready && it.id !in disabled }.map { it.id }.toSet()
+    }
+
+    private suspend fun retrieveKnowledgeContext(query: String): String? {
         val provider = retrievalProvider ?: return null
-        if (!provider.isReady || query.isBlank()) return null
+        if (query.isBlank() || !provider.isEmbeddingModelReady) return null
+        val enabled = enabledCorpusIds()
+        if (enabled.isEmpty()) return null
 
         val passages = try {
-            provider.search(query)
+            provider.search(query, enabled)
         } catch (error: Throwable) {
             logRepository.log(
                 LogLevel.Error,
-                "Wikipedia retrieval failed",
+                "Knowledge retrieval failed",
                 details = error.message,
                 tag = "Retrieval",
                 throwable = error
@@ -1167,19 +1175,21 @@ internal class ChatStoreActions(
 
         logRepository.log(
             LogLevel.Info,
-            "Wikipedia retrieval injected ${passages.size} passage(s)",
-            details = passages.joinToString { "${it.title} (${it.score})" },
+            "Knowledge retrieval injected ${passages.size} passage(s)",
+            details = passages.joinToString { "${it.title} · ${it.source} (${it.score})" },
             tag = "Retrieval"
         )
 
+        // Source-tagged so the model can cite where each fact came from and hits
+        // from different corpora (Wikipedia, Wikivoyage) stay distinguishable.
         return buildString {
-            append("----- BEGIN WIKIPEDIA CONTEXT -----\n")
-            append("Relevant Wikipedia excerpts. Use them if helpful and cite the article titles.\n")
+            append("----- BEGIN KNOWLEDGE CONTEXT -----\n")
+            append("Relevant excerpts from reference sources. Use them if helpful and cite the source and title.\n")
             passages.forEach { passage ->
-                append("\n# ").append(passage.title).append("\n")
+                append("\n# ").append(passage.title).append(" (").append(passage.source).append(")\n")
                 append(passage.text.trim()).append("\n")
             }
-            append("----- END WIKIPEDIA CONTEXT -----")
+            append("----- END KNOWLEDGE CONTEXT -----")
         }
     }
 

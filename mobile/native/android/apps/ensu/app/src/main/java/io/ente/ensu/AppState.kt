@@ -8,5 +8,6 @@ data class AppState(
     val chat: ChatState = ChatState(),
     val developerSettings: DeveloperSettingsState = DeveloperSettingsState(),
     val modelSettings: ModelSettingsState = ModelSettingsState(),
-    val retrievalAssets: RetrievalAssetsState = RetrievalAssetsState()
+    /** Per-corpus retrieval asset status, keyed by corpus id (e.g. "wikipedia"). */
+    val retrievalAssets: Map<String, RetrievalAssetsState> = emptyMap()
 )

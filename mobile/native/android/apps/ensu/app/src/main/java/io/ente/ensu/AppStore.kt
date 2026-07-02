@@ -7,6 +7,8 @@ import io.ente.ensu.chat.RustChatRepository
 import io.ente.ensu.device.ChatDeviceCapability
 import io.ente.ensu.device.AndroidDeviceCapabilityProvider
 import io.ente.ensu.llm.RustLlmProvider
+import io.ente.ensu.llm.CorpusInfo
+import io.ente.ensu.llm.RetrievalAssetsState
 import io.ente.ensu.llm.RetrievalProvider
 import io.ente.ensu.llm.setRetrievalDownloading
 import io.ente.ensu.llm.setRetrievalReady
@@ -73,30 +75,38 @@ class AppStore(
         refreshRetrievalReady()
     }
 
-    /** Reflect whether the Wikipedia retrieval assets are present on-device. */
+    /** Per-corpus retrieval status, for the Settings data rows. */
+    fun retrievalCorpora(): List<CorpusInfo> = retrievalProvider?.corpora() ?: emptyList()
+
+    /** Reflect per-corpus retrieval asset readiness on-device. */
     fun refreshRetrievalReady() {
-        val ready = retrievalProvider?.isReady ?: false
-        _state.update { it.copy(retrievalAssets = it.retrievalAssets.copy(ready = ready)) }
+        val provider = retrievalProvider ?: return
+        _state.update { st ->
+            val updated = provider.corpora().associate { info ->
+                info.id to (st.retrievalAssets[info.id] ?: RetrievalAssetsState()).copy(ready = info.ready)
+            }
+            st.copy(retrievalAssets = updated)
+        }
     }
 
-    /** Download the Wikipedia retrieval assets (embedding model + index). */
-    fun downloadRetrievalAssets() {
+    /** Download a corpus's assets (shared embedding model + that corpus's index). */
+    fun downloadCorpusAssets(corpusId: String) {
         val provider = retrievalProvider ?: return
         val scope = appScope ?: return
-        if (_state.value.retrievalAssets.downloading) return
-        _state.setRetrievalDownloading(0)
+        if (_state.value.retrievalAssets[corpusId]?.downloading == true) return
+        _state.setRetrievalDownloading(corpusId, 0)
         scope.launch {
             try {
-                provider.downloadAssets { percent -> _state.setRetrievalDownloading(percent) }
-                _state.setRetrievalReady()
+                provider.downloadCorpus(corpusId) { percent -> _state.setRetrievalDownloading(corpusId, percent) }
+                _state.setRetrievalReady(corpusId)
             } catch (error: Throwable) {
                 logRepository.log(
                     LogLevel.Error,
-                    "Wikipedia data download failed",
-                    details = error.message,
+                    "Retrieval data download failed",
+                    details = "corpus=$corpusId: ${error.message}",
                     tag = "Retrieval"
                 )
-                _state.setRetrievalError(error.message ?: "Download failed")
+                _state.setRetrievalError(corpusId, error.message ?: "Download failed")
             }
         }
     }

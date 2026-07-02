@@ -24,28 +24,80 @@ import java.io.IOException
 import java.security.MessageDigest
 
 /**
- * On-device Wikipedia retrieval.
+ * On-device retrieval over one or more prebuilt knowledge corpora (Wikipedia +
+ * Wikivoyage for v1).
  *
  * Embeds the query with EmbeddingGemma (loaded into the same llama.cpp engine as
- * the chat model, in embedding mode) and runs cosine top-k over a prebuilt index
- * via the Rust `ente-ensu` retrieval module. Both the embedding model and the
- * index ship/download as on-device assets. See docs-fork/ensu/retrieval-design.md.
+ * the chat model, in embedding mode) *once*, then runs cosine top-k over every
+ * ready corpus via the Rust `ente-ensu` retrieval module and merges the results.
+ * All corpora share the one embedding space, int8 scale, and cosine metric, so
+ * scores are directly comparable across indexes — merge-sort by score and take a
+ * global top-k. The embedding model + each corpus index ship/download as on-device
+ * assets. See docs-fork/ensu/retrieval-design.md ("Additional corpora").
  */
 class RustRetrievalProvider(
     private val embeddingModelPath: File,
-    private val indexDir: File,
+    private val retrievalDir: File,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : RetrievalProvider {
 
-    private data class RagAsset(val target: File, val size: Long, val sha256: String)
+    // remoteName: file name under ASSET_BASE_URL, or null for a sideload-only
+    // asset (present via `adb push` but not yet auto-downloaded — Wikivoyage
+    // hosting is a follow-up). Sideload-only assets still count for isReady/search.
+    private data class RagAsset(
+        val target: File,
+        val size: Long,
+        val sha256: String,
+        val remoteName: String?,
+    )
 
-    // Expected on-device assets with verified size + SHA-256 (the source of truth
-    // for isReady, the download skip/resume logic, and integrity verification).
-    private val assets: List<RagAsset> = listOf(
-        RagAsset(embeddingModelPath, 333_590_944L, "b5ce9d77a3fc4b3b39ccb5643c36777911cc4eb46a66962eadfa3f5f60490d63"),
-        RagAsset(File(indexDir, "manifest.json"), 230L, "e20da369ffc98a2777d72fe618dc39b5cdbe4c6a5585219550aa7c0db357b9f4"),
-        RagAsset(File(indexDir, "vectors.i8"), 180_762_624L, "dac1102d01b164bd2481fc94b2921c96c462f585b17dbfaf5b356c1c62b5b50e"),
-        RagAsset(File(indexDir, "meta.jsonl"), 118_052_053L, "43170744112562f8098a0c2d218706bf31a4306b56d43554976ae5b886b8c2de"),
+    /** One knowledge corpus: an index directory (manifest.json + vectors.i8 + meta.jsonl). */
+    private data class Corpus(
+        val id: String,
+        val label: String,
+        val dir: File,
+        val files: List<RagAsset>,
+    ) {
+        // Right size on disk for all three files. `isReady` uses length only; a
+        // right-size-but-corrupt file passes here yet fails RetrievalIndex.open,
+        // handled best-effort in ensureLoadedLocked.
+        val isReady: Boolean get() = files.all { it.target.exists() && it.target.length() == it.size }
+    }
+
+    // Shared embedding model — embeds the query once for all corpora.
+    private val embeddingAsset = RagAsset(
+        embeddingModelPath, 333_590_944L,
+        "b5ce9d77a3fc4b3b39ccb5643c36777911cc4eb46a66962eadfa3f5f60490d63",
+        remoteName = embeddingModelPath.name,
+    )
+
+    // remotePrefix: prefix for this corpus's files under ASSET_BASE_URL (GitHub
+    // release assets are a flat namespace, so distinct corpora need distinct
+    // names). null => sideload-only (not downloadable). "" => flat names.
+    private fun corpus(id: String, label: String, subDir: String, remotePrefix: String?,
+                       entries: List<Triple<String, Long, String>>): Corpus {
+        val dir = File(retrievalDir, subDir)
+        return Corpus(id, label, dir, entries.map { (name, size, sha) ->
+            RagAsset(File(dir, name), size, sha, remoteName = remotePrefix?.let { "$it$name" })
+        })
+    }
+
+    private val corpora: List<Corpus> = listOf(
+        // Wikipedia (primary) — flat file names, hosted as today.
+        corpus("wikipedia", "Wikipedia", "index", remotePrefix = "", entries = listOf(
+            Triple("manifest.json", 230L, "e20da369ffc98a2777d72fe618dc39b5cdbe4c6a5585219550aa7c0db357b9f4"),
+            Triple("vectors.i8", 180_762_624L, "dac1102d01b164bd2481fc94b2921c96c462f585b17dbfaf5b356c1c62b5b50e"),
+            Triple("meta.jsonl", 118_052_053L, "43170744112562f8098a0c2d218706bf31a4306b56d43554976ae5b886b8c2de"),
+        )),
+        // Wikivoyage — section-chunked, built fp32. Sizes + SHA-256 are from the
+        // canonical built index. Downloadable under "wikivoyage-*" remote names;
+        // the assets must be uploaded to the release under those names (until then
+        // downloadCorpus 404s and sideloading to index-wikivoyage/ still works).
+        corpus("wikivoyage", "Wikivoyage", "index-wikivoyage", remotePrefix = "wikivoyage-", entries = listOf(
+            Triple("manifest.json", 218L, "cedbe0a413d1e7c0aea7f5599781ff2f2701d554dfe6716670cb022b589bcda5"),
+            Triple("vectors.i8", 274_859_520L, "adca352e3e7772f2ae14184638dcd34b920c7ccd239c77f836d2e55e1f5510d6"),
+            Triple("meta.jsonl", 218_542_893L, "ecb530aa3f4785734faebd633e60777256bdf77a6bd63bc66380fda04d8277f1"),
+        )),
     )
 
     // Serializes load/embed/search (single-tenant chat) and prevents an
@@ -55,7 +107,8 @@ class RustRetrievalProvider(
     // route through downloadAssets; this stops two writers racing the same files.
     private val downloadMutex = Mutex()
 
-    @Volatile private var index: RetrievalIndex? = null
+    // Opened index per ready corpus id. Guarded by loadMutex.
+    private val indexes = mutableMapOf<String, RetrievalIndex>()
     @Volatile private var embeddingModel: LlmModelHandle? = null
     @Volatile private var embeddingContext: LlmContextHandle? = null
 
@@ -63,39 +116,65 @@ class RustRetrievalProvider(
         uniffiEnsureInitialized()
     }
 
-    override val isReady: Boolean
-        get() = assets.all { it.target.exists() && it.target.length() == it.size }
+    override val isEmbeddingModelReady: Boolean
+        get() = embeddingModelPath.exists() && embeddingModelPath.length() == embeddingAsset.size
+
+    override fun embeddingDownloadBytesRemaining(): Long =
+        if (isEmbeddingModelReady) 0L else embeddingAsset.size
 
     override suspend fun search(
         query: String,
+        enabledCorpusIds: Set<String>,
         k: Int,
         threshold: Float,
     ): List<RetrievedPassage> = withContext(ioDispatcher) {
-        if (query.isBlank() || !isReady) return@withContext emptyList()
+        if (query.isBlank() || !isEmbeddingModelReady || enabledCorpusIds.isEmpty()) {
+            return@withContext emptyList()
+        }
         try {
             // Hold the lock across load + embed + release so a concurrent search
             // can't embed on a context this one just destroyed.
             loadMutex.withLock {
                 ensureLoadedLocked()
-                val idx = index ?: return@withLock emptyList<RetrievedPassage>()
                 val ctx = embeddingContext ?: return@withLock emptyList<RetrievedPassage>()
+                // Only the enabled + ready corpora participate.
+                val active = indexes.filterKeys { it in enabledCorpusIds }
+                if (active.isEmpty()) return@withLock emptyList<RetrievedPassage>()
 
                 // Query uses EmbeddingGemma's retrieval query prompt so it lands in
-                // the same space as the index (built with the matching document prompt).
+                // the same space as the indexes (built with the matching document prompt).
                 val embedded = llmEmbed(ctx, listOf(QUERY_PROMPT_PREFIX + query))
                 // Free EmbeddingGemma right away — only needed for this embedding,
                 // and the chat generation that follows is RAM-heavy on-device.
                 releaseEmbeddingLocked()
 
                 val queryVector = embedded.firstOrNull() ?: return@withLock emptyList<RetrievedPassage>()
-                idx.search(queryVector, k.toUInt(), threshold).map { hit ->
-                    RetrievedPassage(
-                        title = hit.passage.title,
-                        url = hit.passage.url,
-                        text = hit.passage.text,
-                        score = hit.score,
-                    )
-                }
+                val labels = corpora.associate { it.id to it.label }
+
+                // One embedding, fanned across every enabled index. Each returns its
+                // own top-k above the shared gate; merge, sort by comparable score,
+                // and keep the global top-k. Source tag drives citations + injection.
+                active.entries.flatMap { (id, idx) ->
+                    // Isolate per-corpus failures: with lazy meta.jsonl parsing a
+                    // corrupt row can throw during search. Skip just that corpus so
+                    // the others still serve, rather than letting the outer catch
+                    // swallow every corpus's hits for this turn.
+                    val hits = try {
+                        idx.search(queryVector, k.toUInt(), threshold)
+                    } catch (error: Throwable) {
+                        Log.w("RustRetrievalProvider", "Search failed for corpus $id; skipping it", error)
+                        emptyList()
+                    }
+                    hits.map { hit ->
+                        RetrievedPassage(
+                            source = labels[id] ?: id,
+                            title = hit.passage.title,
+                            url = hit.passage.url,
+                            text = hit.passage.text,
+                            score = hit.score,
+                        )
+                    }
+                }.sortedByDescending { it.score }.take(k)
             }
         } catch (error: Throwable) {
             // Best-effort: never break a chat turn because retrieval failed.
@@ -104,17 +183,21 @@ class RustRetrievalProvider(
         }
     }
 
-    /** Load index + embedding context. Caller must hold [loadMutex]. */
+    /** Open indexes for ready corpora + the embedding context. Caller must hold [loadMutex]. */
     private fun ensureLoadedLocked() {
-        if (index == null) {
-            // Note: `isReady` only checks file length, so a right-size-but-corrupt
-            // index (bad sideload / bit-rot) passes it yet fails to open here. We
-            // deliberately do NOT delete the files on failure — open() can also fail
-            // transiently under memory pressure (mmap ENOMEM, OOM reading meta.jsonl),
-            // and deleting would destroy sideloaded data and force a network
-            // re-download. The failure propagates to search()'s best-effort catch, so
-            // retrieval degrades to off (logged) rather than corrupting state.
-            index = RetrievalIndex.open(indexDir.absolutePath)
+        for (corpus in corpora) {
+            if (!corpus.isReady || indexes.containsKey(corpus.id)) continue
+            try {
+                // Note: `isReady` only checks file length, so a right-size-but-corrupt
+                // index (bad sideload / bit-rot) passes it yet fails to open here. We
+                // deliberately do NOT delete the files on failure — open() can also fail
+                // transiently under memory pressure (mmap ENOMEM, OOM reading meta.jsonl),
+                // and deleting would destroy sideloaded data and force a network
+                // re-download. Skip just this corpus; others still serve.
+                indexes[corpus.id] = RetrievalIndex.open(corpus.dir.absolutePath)
+            } catch (error: Throwable) {
+                Log.w("RustRetrievalProvider", "Failed to open ${corpus.id} index; skipping it", error)
+            }
         }
         if (embeddingContext == null) {
             llmInitBackend()
@@ -140,7 +223,7 @@ class RustRetrievalProvider(
         }
     }
 
-    /** Free embedding model + context, keeping the index. Caller must hold [loadMutex]. */
+    /** Free embedding model + context, keeping the indexes. Caller must hold [loadMutex]. */
     private fun releaseEmbeddingLocked() {
         embeddingContext?.destroy()
         embeddingContext = null
@@ -148,18 +231,52 @@ class RustRetrievalProvider(
         embeddingModel = null
     }
 
-    override suspend fun downloadAssets(onProgress: (Int) -> Unit): Unit = withContext(ioDispatcher) {
+    // Retrieval prerequisite bundled with the chat model at first run; datasets
+    // are downloaded on demand via downloadCorpus.
+    override suspend fun downloadEmbeddingModel(onProgress: (Int) -> Unit): Unit =
+        withContext(ioDispatcher) { downloadFiles(listOf(embeddingAsset), onProgress) }
+
+    override fun corpora(): List<CorpusInfo> = corpora.map { c ->
+        CorpusInfo(
+            id = c.id,
+            label = c.label,
+            ready = c.isReady,
+            // Include the shared embedding model when it's still missing, since
+            // downloading this corpus fetches it too — otherwise the size shown
+            // would understate the actual download by ~333 MB.
+            downloadBytes = c.files.sumOf { it.size } + embeddingDownloadBytesRemaining(),
+            downloadable = c.files.all { it.remoteName != null },
+        )
+    }
+
+    override suspend fun downloadCorpus(corpusId: String, onProgress: (Int) -> Unit): Unit =
+        withContext(ioDispatcher) {
+            val corpus = corpora.firstOrNull { it.id == corpusId }
+                ?: throw IOException("Unknown corpus: $corpusId")
+            if (corpus.files.any { it.remoteName == null }) {
+                throw IOException("Corpus ${corpus.id} is sideload-only (assets not hosted)")
+            }
+            // Shared embedding model (once) + this corpus's index files.
+            downloadFiles(listOf(embeddingAsset) + corpus.files, onProgress)
+        }
+
+    /**
+     * Download a set of assets (shared model + one corpus's files), verifying
+     * size + SHA-256 before publishing each. Single-flighted via [downloadMutex]
+     * so concurrent corpus downloads can't race the shared model file.
+     */
+    private suspend fun downloadFiles(assets: List<RagAsset>, onProgress: (Int) -> Unit) {
         downloadMutex.withLock {
-            if (isReady) {
+            if (assets.all { complete(it) }) {
                 onProgress(100)
                 return@withLock
             }
-            indexDir.mkdirs()
-            embeddingModelPath.parentFile?.mkdirs()
+            retrievalDir.mkdirs()
+            assets.forEach { it.target.parentFile?.mkdirs() }
 
             val total = assets.sumOf { it.size }.coerceAtLeast(1L)
             val needed = assets.filterNot { complete(it) }.sumOf { it.size }
-            val available = indexDir.usableSpace
+            val available = retrievalDir.usableSpace
             if (available in 1 until (needed + FREE_SPACE_MARGIN)) {
                 throw IOException(
                     "Not enough free space: need ~${(needed + FREE_SPACE_MARGIN) / 1_000_000} MB, " +
@@ -183,7 +300,7 @@ class RustRetrievalProvider(
                     if (tmp.exists() && tmp.length() >= asset.size) tmp.delete()
                     var existing = if (tmp.exists()) tmp.length() else 0L
 
-                    val request = Request.Builder().url(assetUrl(asset.target.name))
+                    val request = Request.Builder().url(assetUrl(asset.remoteName!!))
                     if (existing > 0) request.header("Range", "bytes=$existing-")
                     client.newCall(request.build()).execute().use { resp ->
                         if (!resp.isSuccessful) {
@@ -230,12 +347,12 @@ class RustRetrievalProvider(
         }
     }
 
-    /** Free the embedding model/context/index (e.g. when retrieval is toggled off). */
+    /** Free the embedding model/context and all open indexes (e.g. when retrieval is toggled off). */
     suspend fun release() {
         loadMutex.withLock {
             releaseEmbeddingLocked()
-            index?.destroy()
-            index = null
+            indexes.values.forEach { it.destroy() }
+            indexes.clear()
         }
     }
 
@@ -243,7 +360,7 @@ class RustRetrievalProvider(
 
     private fun partFile(asset: RagAsset) = File(asset.target.parentFile, "${asset.target.name}.part")
 
-    private fun assetUrl(fileName: String) = "$ASSET_BASE_URL/$fileName"
+    private fun assetUrl(remoteName: String) = "$ASSET_BASE_URL/$remoteName"
 
     private fun sha256(file: File): String {
         val md = MessageDigest.getInstance("SHA-256")
