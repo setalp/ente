@@ -254,6 +254,98 @@ Validated on a 19.5k-article subset (`docs-fork/ensu/spike/`), real EmbeddingGem
   (e.g. Everest's height is missing from the lead) → reinforces routing exact numbers/dates
   to **Wikidata** rather than prose Wikipedia.
 
+## Additional corpora
+
+Second source after Simple-Wiki, validating the multi-source thesis. Feasibility of
+the four candidates (Wikibooks, Wikivoyage, Wiktionary, Wikidata triples) splits on
+**prose vs. structured**: the current vector pipeline fits prose (Wikivoyage, Wikibooks)
+but is the wrong tool for dictionary lookup (Wiktionary) and knowledge-graph facts
+(Wikidata) — those need the router's non-vector retriever modes. Priority order:
+**Wikivoyage → Wikidata (selected triples) → Wiktionary → Wikibooks** (Wikibooks last:
+explanatory prose is where a small model is already strongest and retrieval helps least).
+
+### Wikivoyage (index built ✅)
+
+Travel guides — complements Wikipedia with geography/places and low overlap with model
+knowledge. Built by `docs-fork/ensu/spike/build_wikivoyage.py` from the Wikimedia
+`enwikivoyage` dump (no clean HF text set exists; the dump preserves headings + listing
+templates). Reuses the same EmbeddingGemma / 768-dim int8 / index format as Wikipedia, so
+`search.py` and the on-device `RetrievalIndex` read it unchanged (meta rows gain an ignored
+`section` field; the `Passage` deserializer ignores unknown fields).
+
+Decisions specific to this corpus:
+
+- **Section chunking, not lead-only.** Wikivoyage's value (POIs, transport, practical tips)
+  lives in sections (See/Do/Eat/Sleep/Get in), so we chunk per section (`max_chars=900`,
+  title+section prepended as an embedding-context boost) rather than lead-only.
+- **Listing-template extraction.** `{{see}}`/`{{do}}`/`{{eat}}`/`{{sleep}}`/`{{listing}}`/
+  `{{marker}}`/`{{vcard}}` carry each POI's name + description; a plain `strip_code()` would
+  drop them. We extract `name: description` lines explicitly. This is what makes POI-level
+  queries work (see quality below). File/image links and `<ref>`/`<gallery>` tags are
+  stripped to avoid `thumb|300px|…` caption noise leaking into embeddings.
+- **Destinations-only curation.** Wikivoyage articles are long and listing-dense (~18
+  chunks/article), so the full corpus is **~609k chunks ≈ 700 MB** on-device — ~2.4× the
+  Simple-Wiki index and too heavy alongside Wikipedia + the LLM. `keep_article` filters on
+  the status/type template (`{{guidecity}}`, `{{outlineregion}}`, …), dropping
+  region/country/continent/topic/itinerary/phrasebook/disambiguation pages (their value is
+  navigation and they inflate the index disproportionately) while keeping all destination
+  types (city/park/district/ruralarea/diveguide/airport/station + unclassified). Result:
+  **26,145 destinations → 357,890 chunks** = 275 MB vectors + 219 MB meta = **~494 MB on disk**
+  (vs. ~700 MB uncurated). Built value range int8 −26..32, 0 all-zero rows.
+- **768-dim, fp32 build.** 768-dim (not Matryoshka-reduced) so Wikivoyage shares the single
+  on-device embed path with the 768-dim Wikipedia index. **Built in fp32 — EmbeddingGemma
+  overflows to all-NaN in fp16 on MPS** (the shipped Wikipedia index is also fp32; only the
+  MiniLM smokes used fp16). `build_index.py`/`build_wikivoyage.py` now default to fp32 and
+  `shard_embed` hard-fails on any non-finite shard so this can't silently recur. Dimension
+  reduction stays available as a future lever if multiple corpora strain the download budget.
+
+Quality (real EmbeddingGemma eval on the full 357,890-chunk index): retrieval is strong with
+sharp entity + section precision. Every factual travel query returned the right destination and
+section — "vegetarian restaurants in Chiang Mai" → *Chiang Mai — Vegetarian* (0.746, the
+listing-extracted section); "how to get from CDG to central Paris" → *Paris Charles de Gaulle
+Airport — By bus/By train* (0.690); "cheap hostels in Bruges" → *Bruges — Budget* (0.728);
+"getting around Bangkok" → *Bangkok — Get around* (0.658). **Cross-lingual holds**: German
+*"beste Reisezeit für Kyoto"* → *Kyoto — Climate* (0.585).
+
+**Gate confirmed at 0.45** (same as Wikipedia → one shared threshold for the router). Factual
+top-1 scores land **0.558–0.746**; non-travel noise (thanks / coding / math / greeting) lands
+**0.216–0.297** — a wide, clean separation (cleaner than Simple-Wiki, where noise reached ~0.37),
+thanks to the title+section context boost tightening factual matches. Comfortable margin: could
+raise to ~0.50 for extra precision without dropping any factual query.
+
+Known coverage gap from destinations-only curation: **country-level queries don't retrieve**
+(we drop country/region pages), so "visa requirements for Japan" or country-wide facts miss —
+acceptable for a places/POI corpus, and a future Wikidata retriever is the better home for those.
+
+Multi-index routing (**P1 done ✅**): `RustRetrievalProvider` now holds a shared embedding model
++ a list of `Corpus` (Wikipedia + Wikivoyage). It embeds the query once and fans the vector
+across every ready corpus, merges hits (scores are comparable — same model/scale/metric),
+takes a global top-k, and tags each with its `source`. `RetrievedPassage.source` +
+`retrieveKnowledgeContext` render source-labeled, citable context ("KNOWLEDGE CONTEXT").
+No Rust/uniffi changes; the core stays a single-index primitive. Wikipedia stays downloadable;
+Wikivoyage is **sideload-only** (`index-wikivoyage/`) until its assets are hosted (P3). `isReady`
+= embedding model + ≥1 corpus present, so a Wikipedia-only device is unaffected.
+`:app:compileDebugKotlin` green.
+
+**P2 done ✅** — lazy meta in the Rust core: `RetrievalIndex` now mmaps `meta.jsonl` and records
+line byte-offsets at open, deserializing only the top-k hit rows per query. Heap holds ~6 MB of
+offsets per corpus instead of ~118/219 MB of passage text, so several corpora stay affordable
+alongside the chat model. Public API unchanged; unit tests + the real-index end-to-end test
+(Everest 0.560) pass.
+
+**P3 done ✅ (code)** — per-corpus download/status: `RetrievalProvider` exposes `corpora()` +
+`downloadCorpus(id)`; `RustRetrievalProvider` downloads the shared model + a chosen corpus and
+verifies size/SHA-256. `AppState.retrievalAssets` is now keyed by corpus id; Settings renders a
+data row per corpus (Wikipedia downloadable, Wikivoyage under `wikivoyage-*` remote names). The
+master "Knowledge context" toggle is retained (per-corpus enable toggles deferred).
+`:app:compileDebugKotlin` green. **Remaining manual step:** upload the built Wikivoyage index to
+the asset release under those names — `gh release upload v1 manifest.json#wikivoyage-manifest.json
+vectors.i8#wikivoyage-vectors.i8 meta.jsonl#wikivoyage-meta.jsonl --repo setalp/ensu-rag-assets`
+(from `docs-fork/ensu/spike/index-wikivoyage/`); until then Wikivoyage works via sideload.
+
+Open follow-ups: on-device end-to-end test (sideload Wikivoyage + `:app:assembleDebug`); decide
+whether huge-city overview pages add value over their district subpages; per-corpus enable toggles.
+
 ## Open decisions
 
 Being resolved one at a time; this section updates as each is settled.

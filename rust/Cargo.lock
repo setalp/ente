@@ -2368,6 +2368,7 @@ dependencies = [
  "flate2",
  "futures-util",
  "llama-cpp-2",
+ "memchr",
  "memmap2",
  "ort 2.0.0-rc.12",
  "parking_lot",

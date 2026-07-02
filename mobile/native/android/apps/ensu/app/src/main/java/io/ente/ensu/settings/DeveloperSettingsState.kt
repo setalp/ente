@@ -3,7 +3,8 @@ package io.ente.ensu.settings
 data class DeveloperSettingsState(
     val isAdvancedUnlocked: Boolean = false,
     val systemPrompt: String = "",
-    // When true (and the index/embedding assets are present), factual queries are
-    // augmented with on-device Wikipedia retrieval. Toggle off to compare answers.
-    val wikipediaRetrievalEnabled: Boolean = true
+    // Knowledge corpora the user has turned OFF. A downloaded corpus is used for
+    // retrieval unless its id is here (i.e. downloaded => on by default). Retrieval
+    // is on/off per dataset now; there is no global toggle.
+    val disabledCorpora: Set<String> = emptySet()
 )

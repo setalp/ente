@@ -20,6 +20,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
@@ -35,6 +36,7 @@ import io.ente.ensu.AppState
 import io.ente.ensu.AppStore
 import io.ente.ensu.llm.ModelSettingsScreen
 import io.ente.ensu.logging.LogViewerScreen
+import io.ente.ensu.settings.KnowledgeSettingsScreen
 import io.ente.ensu.settings.SettingsScreen
 import io.ente.ensu.settings.SystemPromptSettingsScreen
 
@@ -93,6 +95,9 @@ internal fun HomeNavigation(
                 }
                 HomeRoute.Settings -> {
                     SimpleTopBar(title = "Settings") { navController.popBackStack() }
+                }
+                HomeRoute.KnowledgeSettings -> {
+                    SimpleTopBar(title = "Knowledge") { navController.popBackStack() }
                 }
                 else -> Unit
             }
@@ -155,20 +160,37 @@ internal fun HomeNavigation(
                             advancedSettingsDataStore.persistUnlockAdvancedSettings()
                         },
                         onSignIn = onSignIn,
-                        wikipediaRetrievalEnabled = appState.developerSettings.wikipediaRetrievalEnabled,
-                        retrievalAssets = appState.retrievalAssets,
-                        onToggleWikipediaRetrieval = { enabled ->
-                            // Update in-memory state immediately so the next message
-                            // (retrieveWikipediaContext) and the next download decision
-                            // (willDownloadRetrieval) see the new value; the DataStore
-                            // persist below is async. Mirrors the systemPrompt / model
-                            // settings handlers, which also update-then-persist.
+                        onOpenKnowledge = { navController.navigate(HomeRoute.KnowledgeSettings) }
+                    )
+                }
+                composable(
+                    route = HomeRoute.KnowledgeSettings,
+                    enterTransition = { forwardEnter() },
+                    exitTransition = { forwardExit() },
+                    popEnterTransition = { backEnter() },
+                    popExitTransition = { backExit() }
+                ) {
+                    // Compute once per visit — corpora() does file-stat syscalls;
+                    // recomputing every recomposition (e.g. per download-progress
+                    // update) would stat on the UI thread. Live readiness/progress
+                    // still flow through appState.retrievalAssets below.
+                    val knowledgeCorpora = remember { store.retrievalCorpora() }
+                    KnowledgeSettingsScreen(
+                        corpora = knowledgeCorpora,
+                        assets = appState.retrievalAssets,
+                        disabledCorpora = appState.developerSettings.disabledCorpora,
+                        onDownload = { corpusId -> store.downloadCorpusAssets(corpusId) },
+                        onToggleEnabled = { corpusId, on ->
+                            // Update in-memory state immediately so the next message's
+                            // enabledCorpusIds() sees it; persist is async. Mirrors the
+                            // systemPrompt / model settings update-then-persist handlers.
+                            val current = appState.developerSettings.disabledCorpora
+                            val updated = if (on) current - corpusId else current + corpusId
                             store.updateDeveloperSettings(
-                                appState.developerSettings.copy(wikipediaRetrievalEnabled = enabled)
+                                appState.developerSettings.copy(disabledCorpora = updated)
                             )
-                            advancedSettingsDataStore.persistWikipediaRetrievalEnabled(enabled)
-                        },
-                        onDownloadRetrievalAssets = { store.downloadRetrievalAssets() }
+                            advancedSettingsDataStore.persistDisabledCorpora(updated)
+                        }
                     )
                 }
                 composable(
@@ -238,6 +260,7 @@ internal object HomeRoute {
     const val Logs = "logs"
     const val ModelSettings = "model-settings"
     const val SystemPromptSettings = "system-prompt-settings"
+    const val KnowledgeSettings = "knowledge-settings"
 }
 
 internal fun AnimatedContentTransitionScope<NavBackStackEntry>.forwardEnter() =

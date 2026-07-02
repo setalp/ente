@@ -43,7 +43,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // similarity gate inside the provider decides when context is actually injected.
     private val retrievalProvider = RustRetrievalProvider(
         embeddingModelPath = File(resolveRetrievalDir(application), EMBEDDING_MODEL_FILE),
-        indexDir = File(resolveRetrievalDir(application), "index")
+        retrievalDir = resolveRetrievalDir(application)
     )
     private val chatRepository = RustChatRepository(application, credentialStore)
     val configDefaults = RustDefaults.load()
